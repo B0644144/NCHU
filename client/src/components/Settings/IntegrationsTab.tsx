@@ -8,6 +8,7 @@ import { useAddonStore } from '../../store/addonStore'
 import PhotoProvidersSection from './PhotoProvidersSection'
 import { ALL_SCOPES } from '../../api/oauthScopes'
 import ScopeGroupPicker from '../OAuth/ScopeGroupPicker'
+import NotionSyncSettings from './NotionSyncSettings'
 
 interface OAuthPreset {
   id: string
@@ -277,6 +278,9 @@ export default function IntegrationsTab(): React.ReactElement {
 
   return (
     <>
+      <div className="mb-6">
+        <NotionSyncSettings />
+      </div>
       <PhotoProvidersSection />
       {mcpEnabled && (
         <Section title={t('settings.mcp.title')} icon={Terminal}>

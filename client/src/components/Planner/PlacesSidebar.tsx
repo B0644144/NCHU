@@ -14,6 +14,7 @@ import type { Place, Category, Day, AssignmentsMap } from '../../types'
 import FileImportModal from './FileImportModal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Tooltip from '../shared/Tooltip'
+import ExplainableAssistant from '../AI/ExplainableAssistant'
 
 interface PlacesSidebarProps {
   tripId: number
@@ -23,7 +24,7 @@ interface PlacesSidebarProps {
   selectedDayId: number | null
   selectedPlaceId: number | null
   onPlaceClick: (placeId: number | null) => void
-  onAddPlace: () => void
+  onAddPlace: (prefillData?: Partial<Place>) => void
   onAssignToDay: (placeId: number, dayId: number) => void
   onEditPlace: (place: Place) => void
   onDeletePlace: (placeId: number) => void
@@ -646,6 +647,22 @@ const PlacesSidebar = React.memo(function PlacesSidebar({
 
       {/* Liste */}
       <div className="trek-stagger" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }} ref={scrollContainerRef} onScroll={(e) => onScrollTopChange?.((e.currentTarget as HTMLElement).scrollTop)}>
+        
+        {/* Explainable AI block */}
+        {canEditPlaces && filter === 'all' && search === '' && (
+          <div style={{ padding: '16px 16px 0 16px' }}>
+            <ExplainableAssistant 
+              tripId={tripId} 
+              onAddPlace={(data) => {
+                onAddPlace({
+                  name: data.placeName || '',
+                  description: data.description || '',
+                });
+              }} 
+            />
+          </div>
+        )}
+
         {filtered.length === 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 16px', gap: 8 }}>
             <span style={{ fontSize: 13, color: 'var(--text-faint)' }}>

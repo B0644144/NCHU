@@ -611,5 +611,18 @@ export const inAppNotificationsApi = {
   respond: (id: number, response: 'positive' | 'negative') =>
       apiClient.post(`/notifications/in-app/${id}/respond`, { response }).then(r => r.data),
 }
+ 
+export const aiApi = {
+  getRecommendations: (tripId: number | string, context: Record<string, unknown>) => 
+      apiClient.post('/ai/recommend', { tripId, context }).then(r => r.data),
+}
+
+export const notionApi = {
+  getConfig: () => apiClient.get('/notion/config').then(r => r.data),
+  setConfig: (apiKey: string, databaseId: string) => 
+      apiClient.post('/notion/config', { apiKey, databaseId }).then(r => r.data),
+  syncTrip: (tripId: number | string) => 
+      apiClient.post(`/notion/sync/${tripId}`).then(r => r.data),
+}
 
 export default apiClient
