@@ -10,6 +10,7 @@ import Navbar from '../components/Layout/Navbar'
 import DemoBanner from '../components/Layout/DemoBanner'
 import CurrencyWidget from '../components/Dashboard/CurrencyWidget'
 import TimezoneWidget from '../components/Dashboard/TimezoneWidget'
+import DashboardStats from '../components/Dashboard/DashboardStats'
 import TripFormModal from '../components/Trips/TripFormModal'
 import ConfirmDialog from '../components/shared/ConfirmDialog'
 import CopyTripDialog from '../components/shared/CopyTripDialog'
@@ -885,6 +886,11 @@ export default function DashboardPage(): React.ReactElement {
                 onClick={tr => navigate(`/trips/${tr.id}`)}
               />
             </div>
+          )}
+
+          {/* Stats Overview */}
+          {!isLoading && trips.length > 0 && (
+            <DashboardStats trips={trips} archivedTrips={archivedTrips} />
           )}
 
           {/* Mobile: Quick Actions */}
