@@ -2,6 +2,7 @@ import { useEffect, useRef, useMemo, useState, createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
+import Supercluster from 'supercluster'
 import { useSettingsStore } from '../../store/settingsStore'
 import { useAuthStore } from '../../store/authStore'
 import { getCached, isLoading, fetchPhoto, onThumbReady, getAllThumbs } from '../../services/photoService'
@@ -160,7 +161,7 @@ export function MapViewGL({
   const [mapReady, setMapReady] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<mapboxgl.Map | null>(null)
-  const markersRef = useRef<Map<number, mapboxgl.Marker>>(new Map())
+  const markersRef = useRef<Map<string | number, mapboxgl.Marker>>(new Map())
   const locationMarkerRef = useRef<LocationMarkerHandle | null>(null)
   const reservationOverlayRef = useRef<ReservationMapboxOverlay | null>(null)
   const routeLabelMarkersRef = useRef<mapboxgl.Marker[]>([])
@@ -251,6 +252,19 @@ export function MapViewGL({
       // cleanup below.
       setMapReady(true)
     })
+
+    const updateClusters = () => {
+      if (!map) return
+      const bounds = map.getBounds()
+      const currentZoom = Math.floor(map.getZoom())
+      const bbox: [number, number, number, number] = [
+        bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()
+      ]
+      setClusters(supercluster.current.getClusters(bbox, currentZoom))
+    }
+
+    map.on('move', updateClusters)
+    map.on('moveend', updateClusters)
 
     map.on('click', (e) => {
       const t = e.originalEvent.target as HTMLElement
@@ -388,13 +402,37 @@ export function MapViewGL({
     }
   }, [placeIds, placesPhotosEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Reconcile markers with places + photos. Rebuilds the DOM node when any
+  // Supercluster Initialization & Update
+  const supercluster = useRef(new Supercluster({
+    radius: 40,
+    maxZoom: 14,
+  }))
+  const [clusters, setClusters] = useState<any[]>([])
+
+  useEffect(() => {
+    const features = places.filter(p => p.lat && p.lng).map(p => ({
+      type: 'Feature',
+      properties: { ...p },
+      geometry: { type: 'Point', coordinates: [p.lng, p.lat] }
+    }))
+    supercluster.current.load(features as any)
+    if (mapRef.current && mapReady) {
+      const bounds = mapRef.current.getBounds()
+      const currentZoom = Math.floor(mapRef.current.getZoom())
+      const bbox: [number, number, number, number] = [
+        bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()
+      ]
+      setClusters(supercluster.current.getClusters(bbox, currentZoom))
+    }
+  }, [places, mapReady])
+
+  // Reconcile markers with clusters + photos. Rebuilds the DOM node when any
   // visual input changes so photos, selection state and order badges stay
   // in sync.
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
-    const ids = new Set(places.map(p => p.id))
+    const ids = new Set(clusters.map(c => c.properties.cluster ? `cluster-${c.id}` : `place-${c.properties.id}`))
 
     markersRef.current.forEach((marker, id) => {
       if (!ids.has(id)) {
@@ -403,32 +441,51 @@ export function MapViewGL({
       }
     })
 
-    places.forEach(place => {
-      if (!place.lat || !place.lng) return
-      const orderNumbers = dayOrderMap[place.id] ?? null
-      const pck = place.google_place_id || place.osm_id || `${place.lat},${place.lng}`
-      const photoUrl = (pck && photoUrls[pck]) || place.image_url || null
-      const selected = place.id === selectedPlaceId
-      const el = createMarkerElement(place as Place & { category_color?: string; category_icon?: string }, photoUrl, orderNumbers, selected)
-      el.addEventListener('click', (ev) => {
-        ev.stopPropagation()
-        onClickRefs.current.marker?.(place.id)
-      })
-      // Recreate marker each time rather than patching internal state —
-      // mapbox-gl's internal _element bookkeeping breaks under DOM swaps.
-      const existing = markersRef.current.get(place.id)
+    clusters.forEach(cluster => {
+      const isCluster = cluster.properties.cluster
+      const id = isCluster ? `cluster-${cluster.id}` : `place-${cluster.properties.id}`
+
+      const existing = markersRef.current.get(id)
       if (existing) existing.remove()
-      // Default (viewport-aligned) anchors keep the marker parallel to the
-      // screen so its pixel centre lines up with the route line at any
-      // pitch. Tried `pitchAlignment: 'map'` to snap markers onto terrain,
-      // but it rotates the element by the pitch angle and visually offsets
-      // the anchor by ~100px at 45° tilt, which caused the observed drift.
+
+      let el: HTMLElement
+      if (isCluster) {
+        const count = cluster.properties.point_count
+        const size = count < 10 ? 36 : count < 50 ? 42 : 48
+        el = document.createElement('div')
+        el.className = 'marker-cluster-custom marker-cluster-wrapper'
+        el.style.width = `${size}px`
+        el.style.height = `${size}px`
+        el.style.position = 'absolute'
+        el.innerHTML = `<span>${count}</span>`
+        el.addEventListener('click', (ev) => {
+          ev.stopPropagation()
+          const expansionZoom = supercluster.current.getClusterExpansionZoom(cluster.id as number)
+          map.flyTo({
+            center: cluster.geometry.coordinates as [number, number],
+            zoom: expansionZoom,
+            duration: 400
+          })
+        })
+      } else {
+        const place = cluster.properties as Place
+        const orderNumbers = dayOrderMap[place.id] ?? null
+        const pck = place.google_place_id || place.osm_id || `${place.lat},${place.lng}`
+        const photoUrl = (pck && photoUrls[pck]) || place.image_url || null
+        const selected = place.id === selectedPlaceId
+        el = createMarkerElement(place as Place & { category_color?: string; category_icon?: string }, photoUrl, orderNumbers, selected)
+        el.addEventListener('click', (ev) => {
+          ev.stopPropagation()
+          onClickRefs.current.marker?.(place.id)
+        })
+      }
+
       const m = new mapboxgl.Marker({ element: el, anchor: 'center' })
-        .setLngLat([place.lng, place.lat])
+        .setLngLat(cluster.geometry.coordinates as [number, number])
         .addTo(map)
-      markersRef.current.set(place.id, m)
+      markersRef.current.set(id, m)
     })
-  }, [places, selectedPlaceId, dayOrderMap, photoUrls])
+  }, [clusters, selectedPlaceId, dayOrderMap, photoUrls])
 
   // Update route geojson
   useEffect(() => {
