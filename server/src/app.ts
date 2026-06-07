@@ -43,6 +43,8 @@ import journeyRoutes from './routes/journey';
 import journeyPublicRoutes from './routes/journeyPublic';
 import publicConfigRoutes from './routes/publicConfig';
 import systemNoticesRoutes from './routes/systemNotices';
+import aiRoutes from './routes/ai';
+import notionRoutes from './routes/notion';
 import { mcpHandler } from './mcp';
 import { trekOAuthProvider, trekClientsStore } from './mcp/oauthProvider';
 import { Addon } from './types';
@@ -286,6 +288,8 @@ export function createApp(): express.Application {
   app.use('/api/tags', tagsRoutes);
   app.use('/api/categories', categoriesRoutes);
   app.use('/api/admin', adminRoutes);
+  app.use('/api/ai', aiRoutes);
+  app.use('/api/notion', notionRoutes);
 
   // Addons list endpoint
   app.get('/api/addons', authenticate, (_req: Request, res: Response) => {
