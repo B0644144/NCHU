@@ -118,6 +118,7 @@ export function createBudgetItem(
     data.exchange_rate !== undefined ? data.exchange_rate : 1.0,
     data.persons != null ? data.persons : null,
     data.days !== undefined && data.days !== null ? data.days : null,
+    data.note !== undefined && data.note !== null ? data.note : null,
     sortOrder,
     data.expense_date || null,
     data.properties ? JSON.stringify(data.properties) : '{}'

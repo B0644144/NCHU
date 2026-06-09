@@ -1,5 +1,5 @@
 // FE-COMP-TODO-001 to FE-COMP-TODO-015
-import { render, screen, waitFor, fireEvent } from '../../../tests/helpers/render';
+import { render, screen, waitFor, fireEvent, within } from '../../../tests/helpers/render';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../../tests/helpers/msw/server';
@@ -246,7 +246,8 @@ describe('TodoListPanel', () => {
     await user.click(screen.getByText('Edit Me'));
     // Detail pane opens; the name input should have the task's name
     await waitFor(() => {
-      const input = screen.getByDisplayValue('Edit Me');
+      const pane = screen.getByText('Task').parentElement!.parentElement!;
+      const input = within(pane).getByDisplayValue('Edit Me');
       expect(input).toBeInTheDocument();
     });
   });
@@ -264,7 +265,8 @@ describe('TodoListPanel', () => {
     render(<TodoListPanel tripId={1} items={items} />);
     await user.click(screen.getByText('Edit Me'));
     // Wait for detail pane to open
-    const nameInput = await screen.findByDisplayValue('Edit Me');
+    const pane = (await screen.findByText('Task')).parentElement!.parentElement!;
+    const nameInput = within(pane).getByDisplayValue('Edit Me');
     await user.clear(nameInput);
     await user.type(nameInput, 'Renamed');
     // Click Save changes button

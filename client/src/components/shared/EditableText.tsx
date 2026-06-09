@@ -27,7 +27,6 @@ export default function EditableText({
       <div 
         onClick={(e) => {
           if (disabled) return
-          e.stopPropagation()
           setIsEditing(true)
         }}
         className={className}

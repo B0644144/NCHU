@@ -614,13 +614,13 @@ export async function getPlacePhoto(
 
   // Recent error — don't hammer the API
   if (placePhotoCache.getErrored(placeId)) {
-    return { photoUrl: null, attribution: null };
+    throw Object.assign(new Error('No photo available'), { status: 404 });
   }
 
   const existing = placePhotoCache.getInFlight(placeId);
   if (existing) {
     const result = await existing;
-    if (!result) return { photoUrl: null, attribution: null };
+    if (!result) throw Object.assign(new Error('No photo available'), { status: 404 });
     return { photoUrl: `/api/maps/place-photo/${encodeURIComponent(placeId)}/bytes`, attribution: result.attribution };
   }
 
@@ -722,7 +722,7 @@ export async function getPlacePhoto(
   placePhotoCache.setInFlight(placeId, fetchPromise);
 
   const result = await fetchPromise;
-  if (!result) return { photoUrl: null, attribution: null };
+  if (!result) throw Object.assign(new Error('No photo available'), { status: 404 });
   return { photoUrl: `/api/maps/place-photo/${encodeURIComponent(placeId)}/bytes`, attribution: result.attribution };
 }
 

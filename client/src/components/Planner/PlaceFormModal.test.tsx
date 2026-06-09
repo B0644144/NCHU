@@ -253,7 +253,7 @@ describe('PlaceFormModal', () => {
   it('FE-PLANNER-PLACEFORM-022: hasMapsKey=false shows OSM active message', () => {
     // hasMapsKey is false by default in beforeEach
     render(<PlaceFormModal {...defaultProps} />);
-    expect(screen.getByText(/OpenStreetMap/i)).toBeInTheDocument();
+    expect(screen.getByText(/Search via OpenStreetMap/i)).toBeInTheDocument();
   });
 
   // ── Category ─────────────────────────────────────────────────────────────────
