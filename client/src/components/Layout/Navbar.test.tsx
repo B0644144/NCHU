@@ -200,6 +200,8 @@ describe('Navbar', () => {
     const toggleBtn = document.querySelector('button[title]') as HTMLElement;
     expect(toggleBtn).toBeTruthy();
     await user.click(toggleBtn);
+    const darkBtn = screen.getByRole('button', { name: /dark/i });
+    await user.click(darkBtn);
     expect(updateSetting).toHaveBeenCalledWith('dark_mode', 'dark');
   });
 
@@ -280,6 +282,8 @@ describe('Navbar', () => {
     const toggleBtn = document.querySelector('button[title]') as HTMLElement;
     expect(toggleBtn).toBeTruthy();
     await user.click(toggleBtn);
+    const lightBtn = screen.getByRole('button', { name: /light/i });
+    await user.click(lightBtn);
     expect(updateSetting).toHaveBeenCalledWith('dark_mode', 'light');
   });
 

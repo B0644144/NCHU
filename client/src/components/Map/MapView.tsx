@@ -9,7 +9,10 @@ import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import { mapsApi } from '../../api/client'
 import { getCategoryIcon, CATEGORY_ICON_MAP } from '../shared/categoryIcons'
 import ReservationOverlay from './ReservationOverlay'
+import SkiRouteLayer from './SkiRouteLayer'
+import SkiHeatmapLayer from './SkiHeatmapLayer'
 import type { Reservation } from '../../types'
+import { useSettingsStore } from '../../store/settingsStore'
 
 function categoryIconSvg(iconName: string | null | undefined, size: number): string {
   const IconComponent = (iconName && CATEGORY_ICON_MAP[iconName]) || CATEGORY_ICON_MAP['MapPin']
@@ -20,7 +23,7 @@ function categoryIconSvg(iconName: string | null | undefined, size: number): str
 import type { Place } from '../../types'
 
 // Fix default marker icons for vite
-delete L.Icon.Default.prototype._getIconUrl
+delete (L.Icon.Default.prototype as any)._getIconUrl
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
@@ -121,7 +124,7 @@ interface SelectionControllerProps {
   places: Place[]
   selectedPlaceId: number | null
   dayPlaces: Place[]
-  paddingOpts: Record<string, number>
+  paddingOpts: any
 }
 
 function SelectionController({ places, selectedPlaceId, dayPlaces, paddingOpts }: SelectionControllerProps) {
@@ -166,7 +169,7 @@ interface BoundsControllerProps {
   hasDayDetail?: boolean
   places: Place[]
   fitKey: number
-  paddingOpts: Record<string, number>
+  paddingOpts: any
 }
 
 function BoundsController({ places, fitKey, paddingOpts, hasDayDetail }: BoundsControllerProps) {
@@ -210,7 +213,7 @@ function MapClickHandler({ onClick }: MapClickHandlerProps) {
   useEffect(() => {
     if (!onClick) return
     map.on('click', onClick)
-    return () => map.off('click', onClick)
+    return () => { map.off('click', onClick) }
   }, [map, onClick])
   return null
 }
@@ -220,7 +223,7 @@ function MapContextMenuHandler({ onContextMenu }: { onContextMenu: ((e: L.Leafle
   useEffect(() => {
     if (!onContextMenu) return
     map.on('contextmenu', onContextMenu)
-    return () => map.off('contextmenu', onContextMenu)
+    return () => { map.off('contextmenu', onContextMenu) }
   }, [map, onContextMenu])
   return null
 }
@@ -398,6 +401,10 @@ export const MapView = memo(function MapView({
     const set = new Set(visibleConnectionIds)
     return reservations.filter((r: Reservation) => set.has(r.id))
   }, [reservations, visibleConnectionIds])
+  const { settings } = useSettingsStore()
+  const skiMode = settings.ski_mode
+  const [timeOfDay, setTimeOfDay] = useState<number>(12) // 12 PM default
+
   // Dynamic padding: account for sidebars + bottom inspector + day detail panel
   const paddingOpts = useMemo(() => {
     const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
@@ -519,8 +526,23 @@ export const MapView = memo(function MapView({
 
   const gpxPolylines = useMemo(() => places.flatMap(place => {
     if (!place.route_geometry) return []
+    
+    // If it's a ski route, we handle it via SkiRouteLayer instead
+    if (place.properties?.type === 'ski_route') {
+      return [<SkiRouteLayer key={`ski-${place.id}`} place={place} />]
+    }
+
     try {
-      const coords = JSON.parse(place.route_geometry) as [number, number][]
+      const parsed = JSON.parse(place.route_geometry)
+      // Legacy format: raw array of coords
+      let coords: [number, number][] = []
+      if (Array.isArray(parsed)) {
+        coords = parsed as [number, number][]
+      } else if (parsed.type === 'LineString' && Array.isArray(parsed.coordinates)) {
+        // GeoJSON LineString (some ai.ts versions might have used this)
+        coords = parsed.coordinates.map((c: number[]) => [c[1], c[0]] as [number, number])
+      }
+      
       if (!coords || coords.length < 2) return []
       return [(
         <Polyline
@@ -564,6 +586,20 @@ export const MapView = memo(function MapView({
         referrerPolicy="strict-origin-when-cross-origin"
       />
 
+      {skiMode && (
+        <>
+          <TileLayer
+            url="https://tiles.opensnowmap.org/pistes/{z}/{x}/{y}.png"
+            maxZoom={18}
+            keepBuffer={8}
+            updateWhenZooming={false}
+            updateWhenIdle={true}
+            opacity={0.8}
+          />
+          <SkiHeatmapLayer places={places} timeOfDay={timeOfDay} />
+        </>
+      )}
+
       <MapController center={center} zoom={zoom} />
       <BoundsController places={dayPlaces.length > 0 ? dayPlaces : places} fitKey={fitKey} paddingOpts={paddingOpts} hasDayDetail={hasDayDetail} />
       <SelectionController places={places} selectedPlaceId={selectedPlaceId} dayPlaces={dayPlaces} paddingOpts={paddingOpts} />
@@ -586,7 +622,7 @@ export const MapView = memo(function MapView({
         {markers}
       </MarkerClusterGroup>
 
-      {route && route.length > 0 && (
+      {route && route.length > 0 ? (
         <>
           {route.map((seg, i) => seg.length > 1 && (
             <Polyline
@@ -598,11 +634,19 @@ export const MapView = memo(function MapView({
               dashArray="6, 5"
             />
           ))}
-          {routeSegments.map((seg, i) => (
-            <RouteLabel key={i} midpoint={seg.mid} from={seg.from} to={seg.to} walkingText={seg.walkingText} drivingText={seg.drivingText} />
-          ))}
         </>
-      )}
+      ) : dayPlaces && dayPlaces.length > 1 ? (
+        <Polyline
+          positions={dayPlaces.map(p => [p.lat as number, p.lng as number])}
+          color="var(--accent)"
+          weight={2.5}
+          opacity={0.6}
+          dashArray="4, 4"
+        />
+      ) : null}
+          {routeSegments.map((seg, i) => (
+            <RouteLabel key={i} midpoint={seg.mid} walkingText={seg.walkingText} drivingText={seg.drivingText} />
+          ))}
 
       {/* GPX imported route geometries */}
       {gpxPolylines}
@@ -620,6 +664,27 @@ export const MapView = memo(function MapView({
       onClick={cycleTrackingMode}
       bottomOffset={locationButtonBottom as unknown as number}
     />}
+
+    {skiMode && places.some(p => p.properties?.type === 'ski_route') && (
+      <div style={{
+        position: 'absolute', bottom: isMobile ? 120 : 40, left: '50%', transform: 'translateX(-50%)',
+        zIndex: 1000, background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(8px)',
+        padding: '12px 20px', borderRadius: 20, boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+        display: 'flex', flexDirection: 'column', gap: 6, minWidth: 260
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 600, color: '#111827' }}>
+          <span>纜車等待時間模擬 (Heatmap)</span>
+          <span>{Math.floor(timeOfDay)}:{(timeOfDay % 1) * 60 === 0 ? '00' : '30'}</span>
+        </div>
+        <input 
+          type="range" 
+          min="8" max="17" step="0.5" 
+          value={timeOfDay} 
+          onChange={e => setTimeOfDay(Number(e.target.value))}
+          style={{ width: '100%', cursor: 'pointer', accentColor: '#3b82f6' }}
+        />
+      </div>
+    )}
     </div>
 
     {TooltipOverlay && (

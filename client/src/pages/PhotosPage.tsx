@@ -13,11 +13,11 @@ export default function PhotosPage(): React.ReactElement {
   const { id: tripId } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const tripStore = useTripStore()
+  const photos = useTripStore(s => s.photos)
 
   const [trip, setTrip] = useState<Trip | null>(null)
   const [days, setDays] = useState<Day[]>([])
   const [places, setPlaces] = useState<Place[]>([])
-  const [photos, setPhotos] = useState<Photo[]>([])
   const [isLoading, setIsLoading] = useState<boolean>(true)
 
   useEffect(() => {
@@ -37,7 +37,7 @@ export default function PhotosPage(): React.ReactElement {
       setPlaces(placesData.places)
 
       // Load photos
-      await tripStore.loadPhotos(tripId)
+      if (tripId) await tripStore.loadPhotos(tripId)
     } catch (err: unknown) {
       navigate('/dashboard')
     } finally {
@@ -45,21 +45,16 @@ export default function PhotosPage(): React.ReactElement {
     }
   }
 
-  // Sync photos from store
-  useEffect(() => {
-    setPhotos(tripStore.photos)
-  }, [tripStore.photos])
-
   const handleUpload = async (formData: FormData): Promise<void> => {
-    await tripStore.addPhoto(tripId, formData)
+    if (tripId) await tripStore.addPhoto(tripId, formData)
   }
 
   const handleDelete = async (photoId: number): Promise<void> => {
-    await tripStore.deletePhoto(tripId, photoId)
+    if (tripId) await tripStore.deletePhoto(tripId, photoId)
   }
 
   const handleUpdate = async (photoId: number, data: Record<string, string | number | null>): Promise<void> => {
-    await tripStore.updatePhoto(tripId, photoId, data)
+    if (tripId) await tripStore.updatePhoto(tripId, photoId, data)
   }
 
   if (isLoading) {
@@ -101,7 +96,7 @@ export default function PhotosPage(): React.ReactElement {
             onUpdate={handleUpdate}
             places={places}
             days={days}
-            tripId={tripId}
+            tripId={Number(tripId)}
           />
         </div>
       </div>

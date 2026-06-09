@@ -7,31 +7,39 @@ export function verifyTripAccess(tripId: string | number, userId: number) {
 // ── Items ──────────────────────────────────────────────────────────────────
 
 export function listItems(tripId: string | number) {
-  return db.prepare(
+  return (db.prepare(
     'SELECT * FROM todo_items WHERE trip_id = ? ORDER BY sort_order ASC, created_at ASC'
-  ).all(tripId);
+  ).all(tripId) as any[]).map(item => ({
+    ...item,
+    properties: item.properties ? (typeof item.properties === 'string' ? JSON.parse(item.properties) : item.properties) : undefined
+  }));
 }
 
 export function createItem(tripId: string | number, data: {
-  name: string; category?: string; due_date?: string; description?: string; assigned_user_id?: number; priority?: number;
+  name: string; category?: string; due_date?: string; description?: string; assigned_user_id?: number; priority?: number; properties?: Record<string, any>;
 }) {
   const maxOrder = db.prepare('SELECT MAX(sort_order) as max FROM todo_items WHERE trip_id = ?').get(tripId) as { max: number | null };
   const sortOrder = (maxOrder.max !== null ? maxOrder.max : -1) + 1;
 
   const result = db.prepare(
-    'INSERT INTO todo_items (trip_id, name, checked, category, sort_order, due_date, description, assigned_user_id, priority) VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO todo_items (trip_id, name, checked, category, sort_order, due_date, description, assigned_user_id, priority, properties) VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?, ?)'
   ).run(
     tripId, data.name, data.category || null, sortOrder,
-    data.due_date || null, data.description || null, data.assigned_user_id || null, data.priority || 0
+    data.due_date || null, data.description || null, data.assigned_user_id || null, data.priority || 0,
+    data.properties ? JSON.stringify(data.properties) : '{}'
   );
 
-  return db.prepare('SELECT * FROM todo_items WHERE id = ?').get(result.lastInsertRowid);
+  const created = db.prepare('SELECT * FROM todo_items WHERE id = ?').get(result.lastInsertRowid) as any;
+  if (created) {
+    created.properties = created.properties ? (typeof created.properties === 'string' ? JSON.parse(created.properties) : created.properties) : undefined;
+  }
+  return created;
 }
 
 export function updateItem(
   tripId: string | number,
   id: string | number,
-  data: { name?: string; checked?: number; category?: string; due_date?: string | null; description?: string | null; assigned_user_id?: number | null; priority?: number | null },
+  data: { name?: string; checked?: number; category?: string; due_date?: string | null; description?: string | null; assigned_user_id?: number | null; priority?: number | null; properties?: Record<string, any> },
   bodyKeys: string[]
 ) {
   const item = db.prepare('SELECT * FROM todo_items WHERE id = ? AND trip_id = ?').get(id, tripId);
@@ -45,7 +53,8 @@ export function updateItem(
       due_date = CASE WHEN ? THEN ? ELSE due_date END,
       description = CASE WHEN ? THEN ? ELSE description END,
       assigned_user_id = CASE WHEN ? THEN ? ELSE assigned_user_id END,
-      priority = CASE WHEN ? THEN ? ELSE priority END
+      priority = CASE WHEN ? THEN ? ELSE priority END,
+      properties = CASE WHEN ? THEN ? ELSE properties END
     WHERE id = ?
   `).run(
     data.name || null,
@@ -60,10 +69,16 @@ export function updateItem(
     data.assigned_user_id ?? null,
     bodyKeys.includes('priority') ? 1 : 0,
     data.priority ?? 0,
+    bodyKeys.includes('properties') || data.properties !== undefined ? 1 : 0,
+    data.properties !== undefined ? (data.properties ? JSON.stringify(data.properties) : '{}') : null,
     id
   );
 
-  return db.prepare('SELECT * FROM todo_items WHERE id = ?').get(id);
+  const updated = db.prepare('SELECT * FROM todo_items WHERE id = ?').get(id) as any;
+  if (updated) {
+    updated.properties = updated.properties ? (typeof updated.properties === 'string' ? JSON.parse(updated.properties) : updated.properties) : undefined;
+  }
+  return updated;
 }
 
 export function deleteItem(tripId: string | number, id: string | number) {

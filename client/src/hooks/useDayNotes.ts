@@ -11,6 +11,7 @@ interface NoteUiState {
   time: string
   icon: string
   sortOrder?: number
+  category: string
 }
 
 interface NoteUiMap {
@@ -28,13 +29,13 @@ export function useDayNotes(tripId: number | string) {
   const openAddNote = (dayId: number, getMergedItems: (dayId: number) => MergedItem[], expandDay?: (dayId: number) => void) => {
     const merged = getMergedItems(dayId)
     const maxKey = merged.length > 0 ? Math.max(...merged.map((i) => i.sortKey)) : -1
-    setNoteUi((prev) => ({ ...prev, [dayId]: { mode: 'add', text: '', time: '', icon: 'FileText', sortOrder: maxKey + 1 } }))
+    setNoteUi((prev) => ({ ...prev, [dayId]: { mode: 'add', text: '', time: '', icon: 'FileText', sortOrder: maxKey + 1, category: 'general' } }))
     expandDay?.(dayId)
     setTimeout(() => noteInputRef.current?.focus(), 50)
   }
 
   const openEditNote = (dayId: number, note: DayNote) => {
-    setNoteUi((prev) => ({ ...prev, [dayId]: { mode: 'edit', noteId: note.id, text: note.text, time: note.time || '', icon: note.icon || 'FileText' } }))
+    setNoteUi((prev) => ({ ...prev, [dayId]: { mode: 'edit', noteId: note.id, text: note.text, time: note.time || '', icon: note.icon || 'FileText', category: note.category || 'general' } }))
     setTimeout(() => noteInputRef.current?.focus(), 50)
   }
 
@@ -47,9 +48,9 @@ export function useDayNotes(tripId: number | string) {
     if (!ui?.text?.trim()) return
     try {
       if (ui.mode === 'add') {
-        await tripStore.addDayNote(tripId, dayId, { text: ui.text.trim(), time: ui.time || null, icon: ui.icon || 'FileText', sort_order: ui.sortOrder })
+        await tripStore.addDayNote(tripId, dayId, { text: ui.text.trim(), time: ui.time || null, icon: ui.icon || 'FileText', sort_order: ui.sortOrder, category: ui.category })
       } else {
-        await tripStore.updateDayNote(tripId, dayId, ui.noteId!, { text: ui.text.trim(), time: ui.time || null, icon: ui.icon || 'FileText' })
+        await tripStore.updateDayNote(tripId, dayId, ui.noteId!, { text: ui.text.trim(), time: ui.time || null, icon: ui.icon || 'FileText', category: ui.category })
       }
       cancelNote(dayId)
     } catch (err: unknown) { toast.error(err instanceof Error ? err.message : t('common.unknownError')) }

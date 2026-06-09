@@ -106,7 +106,17 @@ const adminOnly = (req: Request, res: Response, next: NextFunction): void => {
 const demoUploadBlock = (req: Request, res: Response, next: NextFunction): void => {
   const authReq = req as AuthRequest;
   if (process.env.DEMO_MODE?.toLowerCase() === 'true' && isDemoEmail(authReq.user?.email)) {
-    res.status(403).json({ error: 'Uploads are disabled in demo mode. Self-host TREK for full functionality.' });
+    if (req.complete) {
+      res.status(403).json({ error: 'Uploads are disabled in demo mode. Self-host TREK for full functionality.' });
+    } else {
+      req.on('data', () => {});
+      const done = () => {
+        res.status(403).json({ error: 'Uploads are disabled in demo mode. Self-host TREK for full functionality.' });
+      };
+      req.on('end', done);
+      req.on('error', done);
+      req.resume();
+    }
     return;
   }
   next();

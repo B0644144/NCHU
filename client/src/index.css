@@ -815,3 +815,45 @@ img[alt="TREK"] {
 .collab-note-md-full table { border-collapse: collapse; width: 100%; margin: 0.5em 0; }
 .collab-note-md-full th, .collab-note-md-full td { border: 1px solid var(--border-primary); padding: 4px 8px; font-size: 0.9em; }
 .collab-note-md-full hr { border: none; border-top: 1px solid var(--border-primary); margin: 0.8em 0; }
+
+/* Premium Card Hover */
+.trek-premium-card {
+  transition: transform 300ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 300ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.trek-premium-card:hover {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+.dark .trek-premium-card:hover {
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255,255,255,0.08);
+}
+
+/* Premium Gradient Text */
+.trek-gradient-text {
+  background: linear-gradient(135deg, #6366F1 0%, #a855f7 50%, #ec4899 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent;
+}
+.dark .trek-gradient-text {
+  background: linear-gradient(135deg, #818CF8 0%, #c084fc 50%, #f472b6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* V46: Ski Hub Night Mode */
+body.ski-night-mode {
+  --bg-main: #050014;
+  --bg-card: rgba(15, 0, 30, 0.8);
+  --bg-secondary: #1a0b2e;
+  --border-primary: rgba(217, 70, 239, 0.3);
+  --border-faint: rgba(217, 70, 239, 0.1);
+  --text-primary: #fdf4ff;
+  --text-secondary: #e879f9;
+  --text-faint: #c026d3;
+  --bg-hover: rgba(217, 70, 239, 0.15);
+}
+body.ski-night-mode .lucide {
+  filter: drop-shadow(0 0 5px currentColor);
+}

@@ -58,7 +58,7 @@ export default function DashboardStats({ trips, archivedTrips }: DashboardStatsP
       boxShadow: '0 8px 32px rgba(0, 0, 0, 0.05)'
     }}>
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-xl font-bold flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+        <h3 className="text-xl font-bold flex items-center gap-2 trek-gradient-text">
           <TrendingUp className="text-indigo-500" />
           {t('dashboard.stats.title', { defaultValue: 'Travel Overview' })}
         </h3>

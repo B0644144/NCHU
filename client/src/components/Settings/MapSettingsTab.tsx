@@ -146,6 +146,7 @@ export default function MapSettingsTab(): React.ReactElement {
   const [defaultLat, setDefaultLat] = useState<number | string>(settings.default_lat || 48.8566)
   const [defaultLng, setDefaultLng] = useState<number | string>(settings.default_lng || 2.3522)
   const [defaultZoom, setDefaultZoom] = useState<number | string>(settings.default_zoom || 10)
+  const [skiMode, setSkiMode] = useState<boolean>(settings.ski_mode === true)
 
   useEffect(() => {
     setProvider((settings.map_provider as Provider) || 'leaflet')
@@ -157,6 +158,7 @@ export default function MapSettingsTab(): React.ReactElement {
     setDefaultLat(settings.default_lat || 48.8566)
     setDefaultLng(settings.default_lng || 2.3522)
     setDefaultZoom(settings.default_zoom || 10)
+    setSkiMode(settings.ski_mode === true)
   }, [settings])
 
   const handleMapClick = useCallback((mapInfo) => {
@@ -181,7 +183,14 @@ export default function MapSettingsTab(): React.ReactElement {
     route_geometry: null,
     place_time: null,
     end_time: null,
-    created_at: Date(),
+    created_at: '',
+    notes: null,
+    currency: null,
+    duration_minutes: null,
+    time_locked: null,
+    transport_mode: null,
+    website: null,
+    phone: null,
   }], [defaultLat, defaultLng])
 
   const saveMapSettings = async (): Promise<void> => {
@@ -197,6 +206,7 @@ export default function MapSettingsTab(): React.ReactElement {
         default_lat: parseFloat(String(defaultLat)),
         default_lng: parseFloat(String(defaultLng)),
         default_zoom: parseInt(String(defaultZoom)),
+        ski_mode: skiMode,
       })
       toast.success(t('settings.toast.mapSaved'))
     } catch (err: unknown) {
@@ -357,6 +367,22 @@ export default function MapSettingsTab(): React.ReactElement {
           </div>
         </div>
       )}
+
+      {/* Ski Mode Toggle */}
+      <div className="flex items-start gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+        <div className="flex-1">
+          <div className="text-sm font-medium text-slate-900 dark:text-white flex items-center gap-2">
+            ⛷️ Ski Mode
+            <span className="text-[9px] font-semibold tracking-wide uppercase px-1.5 py-[3px] rounded bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 leading-none">
+              OpenSnowMap
+            </span>
+          </div>
+          <div className="text-xs text-slate-500 mt-0.5">
+            Overlay global ski resort maps, pistes, and lifts directly onto the interactive map.
+          </div>
+        </div>
+        <ToggleSwitch on={skiMode} onToggle={() => setSkiMode(!skiMode)} />
+      </div>
 
       {/* Default map position — applies regardless of provider */}
       <div className="grid grid-cols-2 gap-3">

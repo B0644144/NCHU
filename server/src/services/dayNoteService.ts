@@ -15,10 +15,10 @@ export function dayExists(dayId: string | number, tripId: string | number) {
   return db.prepare('SELECT id FROM days WHERE id = ? AND trip_id = ?').get(dayId, tripId);
 }
 
-export function createNote(dayId: string | number, tripId: string | number, text: string, time?: string, icon?: string, sort_order?: number) {
+export function createNote(dayId: string | number, tripId: string | number, text: string, time?: string, icon?: string, sort_order?: number, category?: string) {
   const result = db.prepare(
-    'INSERT INTO day_notes (day_id, trip_id, text, time, icon, sort_order) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(dayId, tripId, text.trim(), time || null, icon || '\uD83D\uDCDD', sort_order ?? 9999);
+    'INSERT INTO day_notes (day_id, trip_id, text, time, icon, sort_order, category) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(dayId, tripId, text.trim(), time || null, icon || '\uD83D\uDCDD', sort_order ?? 9999, category || 'general');
   return db.prepare('SELECT * FROM day_notes WHERE id = ?').get(result.lastInsertRowid);
 }
 
@@ -26,14 +26,15 @@ export function getNote(id: string | number, dayId: string | number, tripId: str
   return db.prepare('SELECT * FROM day_notes WHERE id = ? AND day_id = ? AND trip_id = ?').get(id, dayId, tripId) as DayNote | undefined;
 }
 
-export function updateNote(id: string | number, current: DayNote, fields: { text?: string; time?: string; icon?: string; sort_order?: number }) {
+export function updateNote(id: string | number, current: DayNote, fields: { text?: string; time?: string; icon?: string; sort_order?: number; category?: string }) {
   db.prepare(
-    'UPDATE day_notes SET text = ?, time = ?, icon = ?, sort_order = ? WHERE id = ?'
+    'UPDATE day_notes SET text = ?, time = ?, icon = ?, sort_order = ?, category = ? WHERE id = ?'
   ).run(
     fields.text !== undefined ? fields.text.trim() : current.text,
     fields.time !== undefined ? fields.time : current.time,
     fields.icon !== undefined ? fields.icon : current.icon,
     fields.sort_order !== undefined ? fields.sort_order : current.sort_order,
+    fields.category !== undefined ? fields.category : (current.category || 'general'),
     id
   );
   return db.prepare('SELECT * FROM day_notes WHERE id = ?').get(id);

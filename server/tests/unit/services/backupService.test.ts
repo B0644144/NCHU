@@ -538,7 +538,12 @@ describe('BACKUP-038 restoreFromZip', () => {
 // better-sqlite3 mock — hoisted by Vitest regardless of file position
 // ---------------------------------------------------------------------------
 
-const DatabaseMock = vi.hoisted(() => vi.fn());
+const DatabaseMock = vi.hoisted(() => vi.fn().mockImplementation(function () {
+  return {
+    prepare: vi.fn().mockReturnValue({ get: vi.fn(), all: vi.fn() }),
+    close: vi.fn(),
+  };
+}));
 
 vi.mock('better-sqlite3', () => ({ default: DatabaseMock }));
 
@@ -660,7 +665,8 @@ function setupSuccessfulExtraction() {
 
 describe('BACKUP-042 restoreFromZip — integrity check fails', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    Object.values(fsMock).forEach(m => (m as ReturnType<typeof vi.fn>).mockReset());
+    Object.values(unzipperMock).forEach(m => (m as ReturnType<typeof vi.fn>).mockReset());
   });
 
   it('BACKUP-042a — returns status 400 with integrity check error message', async () => {
@@ -678,7 +684,7 @@ describe('BACKUP-042 restoreFromZip — integrity check fails', () => {
       }),
       close: vi.fn(),
     };
-    DatabaseMock.mockReturnValue(fakeDbInstance);
+    DatabaseMock.mockImplementation(function () { return fakeDbInstance; });
 
     const result = await restoreFromZip('/data/tmp/upload.zip');
 
@@ -691,7 +697,8 @@ describe('BACKUP-042 restoreFromZip — integrity check fails', () => {
 
 describe('BACKUP-043 restoreFromZip — missing required table', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    Object.values(fsMock).forEach(m => (m as ReturnType<typeof vi.fn>).mockReset());
+    Object.values(unzipperMock).forEach(m => (m as ReturnType<typeof vi.fn>).mockReset());
   });
 
   it('BACKUP-043a — returns status 400 with missing required table error', async () => {
@@ -712,7 +719,7 @@ describe('BACKUP-043 restoreFromZip — missing required table', () => {
         }),
       close: vi.fn(),
     };
-    DatabaseMock.mockReturnValue(fakeDbInstance);
+    DatabaseMock.mockImplementation(function () { return fakeDbInstance; });
 
     const result = await restoreFromZip('/data/tmp/upload.zip');
 
@@ -725,7 +732,8 @@ describe('BACKUP-043 restoreFromZip — missing required table', () => {
 
 describe('BACKUP-044 restoreFromZip — Database constructor throws (invalid SQLite)', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    Object.values(fsMock).forEach(m => (m as ReturnType<typeof vi.fn>).mockReset());
+    Object.values(unzipperMock).forEach(m => (m as ReturnType<typeof vi.fn>).mockReset());
   });
 
   it('BACKUP-044a — returns status 400 with "not a valid SQLite database" error', async () => {
@@ -736,7 +744,7 @@ describe('BACKUP-044 restoreFromZip — Database constructor throws (invalid SQL
     );
     fsMock.rmSync.mockReturnValue(undefined);
 
-    DatabaseMock.mockImplementation(() => {
+    DatabaseMock.mockImplementation(function () {
       throw new Error('file is not a database');
     });
 
@@ -751,7 +759,8 @@ describe('BACKUP-044 restoreFromZip — Database constructor throws (invalid SQL
 
 describe('BACKUP-045 restoreFromZip — full success path (no uploads)', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    Object.values(fsMock).forEach(m => (m as ReturnType<typeof vi.fn>).mockReset());
+    Object.values(unzipperMock).forEach(m => (m as ReturnType<typeof vi.fn>).mockReset());
   });
 
   function setupAllTablesPresent() {
@@ -771,7 +780,7 @@ describe('BACKUP-045 restoreFromZip — full success path (no uploads)', () => {
         }),
       close: vi.fn(),
     };
-    DatabaseMock.mockReturnValue(fakeDbInstance);
+    DatabaseMock.mockImplementation(function () { return fakeDbInstance; });
     return fakeDbInstance;
   }
 
@@ -837,7 +846,8 @@ describe('BACKUP-045 restoreFromZip — full success path (no uploads)', () => {
 
 describe('BACKUP-046 restoreFromZip — with uploads directory', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    Object.values(fsMock).forEach(m => (m as ReturnType<typeof vi.fn>).mockReset());
+    Object.values(unzipperMock).forEach(m => (m as ReturnType<typeof vi.fn>).mockReset());
   });
 
   it('BACKUP-046a — cpSync is called to copy uploads when they exist in the archive', async () => {
@@ -859,7 +869,7 @@ describe('BACKUP-046 restoreFromZip — with uploads directory', () => {
         }),
       close: vi.fn(),
     };
-    DatabaseMock.mockReturnValue(fakeDbInstance);
+    DatabaseMock.mockImplementation(function () { return fakeDbInstance; });
 
     fsMock.existsSync.mockImplementation((p: string) => {
       // travel.db present, extractedUploads present
@@ -868,10 +878,11 @@ describe('BACKUP-046 restoreFromZip — with uploads directory', () => {
       return true;
     });
     fsMock.readdirSync.mockImplementation((p: string) => {
-      // uploadsDir has one subdirectory 'photos'; 'photos' has one file
-      if (String(p).includes('uploads') && !String(p).includes('restore-')) {
+      // uploadsDir (live, no 'restore-') → return subdirectory names
+      if (String(p).includes('uploads') && !String(p).includes('restore-') && !String(p).includes('photos')) {
         return ['photos'] as any;
       }
+      // photos subdir → return a file so the inner loop runs
       if (String(p).includes('photos')) return ['img1.jpg'] as any;
       return [] as any;
     });

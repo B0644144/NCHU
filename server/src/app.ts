@@ -2,6 +2,9 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
+import rateLimit from 'express-rate-limit';
+import compression from 'compression';
+import hpp from 'hpp';
 import path from 'node:path';
 import fs from 'node:fs';
 
@@ -37,6 +40,7 @@ import vacayRoutes from './routes/vacay';
 import atlasRoutes from './routes/atlas';
 import memoriesRoutes from './routes/memories/unified';
 import photoRoutes from './routes/photos';
+import tripPhotosRoutes from './routes/tripPhotos';
 import notificationRoutes from './routes/notifications';
 import shareRoutes from './routes/share';
 import journeyRoutes from './routes/journey';
@@ -45,6 +49,7 @@ import publicConfigRoutes from './routes/publicConfig';
 import systemNoticesRoutes from './routes/systemNotices';
 import aiRoutes from './routes/ai';
 import notionRoutes from './routes/notion';
+import skiRoutes from './routes/ski';
 import { mcpHandler } from './mcp';
 import { trekOAuthProvider, trekClientsStore } from './mcp/oauthProvider';
 import { Addon } from './types';
@@ -162,8 +167,10 @@ export function createApp(): express.Application {
     });
   }
 
+  app.use(compression());
   app.use(express.json({ limit: '100kb' }));
   app.use(express.urlencoded({ extended: true }));
+  app.use(hpp());
   app.use(cookieParser());
   app.use(enforceGlobalMfaPolicy);
 
@@ -265,7 +272,48 @@ export function createApp(): express.Application {
     res.status(401).send('Authentication required');
   });
 
+  // ── Rate limiting ──────────────────────────────────────────────────────────
+  // Skip in test environment to avoid flaky tests
+  const isTest = process.env.NODE_ENV === 'test';
+
+  // Auth endpoints: 10 attempts per 15 minutes per IP
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: isTest ? 0 : 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many attempts, please try again later.' },
+    skip: () => isTest,
+  });
+
+  // Sensitive endpoints: 5 attempts per hour per IP (OTP, password reset)
+  const strictLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: isTest ? 0 : 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many attempts, please try again in an hour.' },
+    skip: () => isTest,
+  });
+
+  // General API: 500 requests per minute per IP (DDoS mitigation)
+  const apiLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: isTest ? 0 : 500,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: () => isTest,
+  });
+
   // API Routes
+  app.use('/api/auth/login', authLimiter);
+  app.use('/api/auth/register', authLimiter);
+  app.use('/api/auth/mfa', authLimiter);
+  app.use('/api/auth/forgot-password', strictLimiter);
+  app.use('/api/auth/reset-password', strictLimiter);
+  app.use('/api/auth/totp', strictLimiter);
+  app.use('/api', apiLimiter);
+
   app.use('/api/auth', authRoutes);
   app.use('/api/auth/oidc', oidcRoutes);
   app.use('/api/trips', tripsRoutes);
@@ -275,6 +323,7 @@ export function createApp(): express.Application {
   app.use('/api/trips/:tripId/packing', packingRoutes);
   app.use('/api/trips/:tripId/todo', todoRoutes);
   app.use('/api/trips/:tripId/files', filesRoutes);
+  app.use('/api/trips/:tripId/photos', tripPhotosRoutes);
   app.use('/api/trips/:tripId/budget', budgetRoutes);
   app.use('/api/trips/:tripId/collab', collabRoutes);
   app.use('/api/trips/:tripId/reservations', reservationsRoutes);
@@ -290,6 +339,7 @@ export function createApp(): express.Application {
   app.use('/api/admin', adminRoutes);
   app.use('/api/ai', aiRoutes);
   app.use('/api/notion', notionRoutes);
+  app.use('/api/ski', skiRoutes);
 
   // Addons list endpoint
   app.get('/api/addons', authenticate, (_req: Request, res: Response) => {

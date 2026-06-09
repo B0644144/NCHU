@@ -1,4 +1,4 @@
-const nl: Record<string, string> = {
+const nl: Record<string, any> = {
   // Common
   'common.save': 'Opslaan',
   'common.showMore': 'Meer tonen',

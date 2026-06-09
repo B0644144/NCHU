@@ -63,12 +63,12 @@ export default function VacaySettings({ onClose }: VacaySettingsProps) {
               { day: 6, label: t('vacay.sat') },
               { day: 0, label: t('vacay.sun') },
             ].map(({ day, label }) => {
-              const current: number[] = plan.weekend_days ? String(plan.weekend_days).split(',').map(Number) : [0, 6]
+              const current: number[] = Array.isArray(plan.weekend_days) ? plan.weekend_days : (plan.weekend_days ? String(plan.weekend_days).split(',').map(Number) : [0, 6])
               const active = current.includes(day)
               return (
                 <button key={day} onClick={() => {
                   const next = active ? current.filter(d => d !== day) : [...current, day]
-                  updatePlan({ weekend_days: next.join(',') })
+                  updatePlan({ weekend_days: next.join(',') } as any)
                 }}
                   style={{
                     padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer',

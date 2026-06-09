@@ -27,7 +27,7 @@ router.get('/', authenticate, (req: Request, res: Response) => {
   const trip = verifyTripAccess(tripId, authReq.user.id);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
 
-  res.json({ items: listBudgetItems(tripId) });
+  res.json({ items: listBudgetItems(tripId, req.query as any) });
 });
 
 router.get('/summary/per-person', authenticate, (req: Request, res: Response) => {

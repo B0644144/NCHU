@@ -67,7 +67,7 @@ export default function WhatsNextWidget({ tripMembers = [] }: WhatsNextWidgetPro
             category: a.place.category,
             participants: (a.participants && a.participants.length > 0)
               ? a.participants
-              : tripMembers.map(m => ({ user_id: m.id, username: m.username, avatar: m.avatar })),
+              : tripMembers.map(m => ({ user_id: m.id, username: m.username, avatar: m.avatar_url })),
             address: a.place.address,
           })
         }
@@ -177,7 +177,7 @@ export default function WhatsNextWidget({ tripMembers = [] }: WhatsNextWidgetPro
                                 fontSize: 7, fontWeight: 700, color: 'var(--text-muted)',
                                 overflow: 'hidden', flexShrink: 0,
                               }}>
-                                {p.avatar
+                                {p.avatar_url || p.avatar
                                   ? <img src={`/uploads/avatars/${p.avatar}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                   : p.username?.[0]?.toUpperCase()
                                 }

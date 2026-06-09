@@ -156,6 +156,7 @@ export function MapViewGL({
   const mapbox3d = useSettingsStore(s => s.settings.mapbox_3d_enabled !== false)
   const mapboxQuality = useSettingsStore(s => s.settings.mapbox_quality_mode === true)
   const showEndpointLabels = useSettingsStore(s => s.settings.map_booking_labels) !== false
+  const skiMode = useSettingsStore(s => s.settings.ski_mode === true)
   const placesPhotosEnabled = useAuthStore(s => s.placesPhotosEnabled)
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>(getAllThumbs)
   const [mapReady, setMapReady] = useState(false)
@@ -324,7 +325,7 @@ export function MapViewGL({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const curAlt = (ll as any).alt ?? 0
         if (Math.abs(curAlt - alt) > 0.25) {
-          marker.setLngLat([ll.lng, ll.lat, alt])
+          marker.setLngLat([ll.lng, ll.lat, alt] as any)
         }
       })
     }
@@ -426,13 +427,44 @@ export function MapViewGL({
     }
   }, [places, mapReady])
 
+  // OpenSnowMap Overlay Effect
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady) return
+
+    if (skiMode) {
+      if (!map.getSource('opensnowmap')) {
+        map.addSource('opensnowmap', {
+          type: 'raster',
+          tiles: ['https://tiles.opensnowmap.org/pistes/{z}/{x}/{y}.png'],
+          tileSize: 256,
+          maxzoom: 18,
+        })
+      }
+      if (!map.getLayer('opensnowmap-layer')) {
+        map.addLayer({
+          id: 'opensnowmap-layer',
+          type: 'raster',
+          source: 'opensnowmap',
+          paint: {
+            'raster-opacity': 0.8,
+            'raster-fade-duration': 300
+          }
+        })
+      }
+    } else {
+      if (map.getLayer('opensnowmap-layer')) map.removeLayer('opensnowmap-layer')
+      if (map.getSource('opensnowmap')) map.removeSource('opensnowmap')
+    }
+  }, [mapReady, skiMode])
+
   // Reconcile markers with clusters + photos. Rebuilds the DOM node when any
   // visual input changes so photos, selection state and order badges stay
   // in sync.
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
-    const ids = new Set(clusters.map(c => c.properties.cluster ? `cluster-${c.id}` : `place-${c.properties.id}`))
+    const ids = new Set<string | number>(clusters.map(c => c.properties.cluster ? `cluster-${c.id}` : `place-${c.properties.id}`))
 
     markersRef.current.forEach((marker, id) => {
       if (!ids.has(id)) {
@@ -539,7 +571,32 @@ export function MapViewGL({
     const features = places.flatMap(place => {
       if (!place.route_geometry) return []
       try {
-        const coords = JSON.parse(place.route_geometry) as [number, number][]
+        const parsed = JSON.parse(place.route_geometry)
+        
+        // Handle FeatureCollection (used by AI Ski Routes)
+        if (parsed.type === 'FeatureCollection' && Array.isArray(parsed.features)) {
+          return parsed.features.flatMap((f: any) => {
+            if (f.geometry?.type !== 'LineString') return []
+            return [{
+              type: 'Feature' as const,
+              properties: { 
+                color: f.properties?.color || (place as Place & { category_color?: string }).category_color || '#3b82f6',
+                dashed: f.properties?.dashed
+              },
+              geometry: f.geometry
+            }]
+          })
+        }
+        
+        // Handle legacy array of coords
+        let coords: [number, number][] = []
+        if (Array.isArray(parsed)) {
+          coords = parsed as [number, number][]
+        } else if (parsed.type === 'LineString' && Array.isArray(parsed.coordinates)) {
+          // It's already in [lng, lat] for LineString, but let's make sure
+          coords = parsed.coordinates.map((c: number[]) => [c[1], c[0]] as [number, number]) // from Leaflet style back to [lng, lat]
+        }
+        
         if (!coords || coords.length < 2) return []
         return [{
           type: 'Feature' as const,

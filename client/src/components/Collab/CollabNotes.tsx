@@ -39,6 +39,7 @@ interface CollabNote {
   author?: { username: string; avatar: string | null }
   user?: { username: string; avatar: string | null }
   files?: NoteFile[]
+  attachments?: NoteFile[]
 }
 
 interface NoteAuthor {
@@ -176,11 +177,11 @@ const NOTE_COLORS = [
   { value: '#8b5cf6', label: 'Violet' },
 ]
 
-const formatTimestamp = (ts, t, locale) => {
+const formatTimestamp = (ts: string, t: any, locale: string) => {
   if (!ts) return ''
   const d = new Date(ts.endsWith?.('Z') ? ts : ts + 'Z')
   const now = new Date()
-  const diffMs = now - d
+  const diffMs = now.getTime() - d.getTime()
   const diffMins = Math.floor(diffMs / 60000)
   if (diffMins < 1) return t('collab.chat.justNow') || 'just now'
   if (diffMins < 60) return t('collab.chat.minutesAgo', { n: diffMins }) || `${diffMins}m ago`
@@ -240,7 +241,7 @@ function UserAvatar({ user, size = 14 }: UserAvatarProps) {
 // ── New Note Modal (portal to body) ─────────────────────────────────────────
 interface NoteFormModalProps {
   onClose: () => void
-  onSubmit: (data: { title: string; content: string; category: string; website: string; files?: File[] }) => Promise<void>
+  onSubmit: (data: { title: string; content: string; category: string | null; website: string | null; files?: File[]; _pendingFiles?: File[]; color?: string }) => Promise<void>
   onDeleteFile?: (noteId: number, fileId: number) => Promise<void>
   existingCategories: string[]
   categoryColors: Record<string, string>
@@ -584,8 +585,8 @@ interface CategorySettingsModalProps {
 }
 
 function CategorySettingsModal({ onClose, categories, categoryColors, onSave, onRenameCategory, t }: CategorySettingsModalProps) {
-  const [localColors, setLocalColors] = useState({ ...categoryColors })
-  const [renames, setRenames] = useState({}) // { oldName: newName }
+  const [localColors, setLocalColors] = useState<Record<string, string>>({ ...categoryColors })
+  const [renames, setRenames] = useState<Record<string, string>>({}) // { oldName: newName }
   const [newCatName, setNewCatName] = useState('')
 
   const handleColorChange = (cat, color) => {
@@ -810,8 +811,8 @@ function NoteCard({ note, currentUser, canEdit, onUpdate, onDelete, onEdit, onVi
             <div style={{ width: 1, height: 12, background: 'var(--border-faint)', flexShrink: 0, marginLeft: 1, marginRight: 1 }} />
             {/* Author avatar */}
             <div style={{ position: 'relative', flexShrink: 0 }}
-              onMouseEnter={e => { const tip = e.currentTarget.querySelector('[data-tip]'); if (tip) tip.style.opacity = '1' }}
-              onMouseLeave={e => { const tip = e.currentTarget.querySelector('[data-tip]'); if (tip) tip.style.opacity = '0' }}>
+              onMouseEnter={e => { const tip = e.currentTarget.querySelector('[data-tip]') as HTMLElement; if (tip) tip.style.opacity = '1' }}
+              onMouseLeave={e => { const tip = e.currentTarget.querySelector('[data-tip]') as HTMLElement; if (tip) tip.style.opacity = '0' }}>
               <UserAvatar user={author} size={16} />
               <div data-tip style={{
                 position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',

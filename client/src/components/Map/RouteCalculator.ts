@@ -118,6 +118,8 @@ export async function calculateSegments(
       mid, from, to,
       walkingText: formatDuration(walkingDuration),
       drivingText: formatDuration(leg.duration),
+      distance: leg.distance,
+      duration: leg.duration,
     }
   })
 }

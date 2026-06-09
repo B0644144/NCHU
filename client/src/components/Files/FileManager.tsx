@@ -1,5 +1,5 @@
 import ReactDOM from 'react-dom'
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { Upload, Trash2, ExternalLink, Download, X, FileText, FileImage, File, MapPin, Ticket, StickyNote, Star, RotateCcw, Pencil, Check, ChevronLeft, ChevronRight, Plane, Train, Car, Ship } from 'lucide-react'
 import { useToast } from '../shared/Toast'
@@ -255,7 +255,7 @@ interface FileManagerProps {
   assignments?: AssignmentsMap
   reservations?: Reservation[]
   tripId: number
-  allowedFileTypes: Record<string, string[]>
+  allowedFileTypes?: string | string[]
 }
 
 export default function FileManager({ files = [], onUpload, onDelete, onUpdate, places, days = [], assignments = {}, reservations = [], tripId, allowedFileTypes }: FileManagerProps) {
@@ -278,6 +278,17 @@ export default function FileManager({ files = [], onUpload, onDelete, onUpdate, 
     } catch { /* */ }
     setLoadingTrash(false)
   }, [tripId])
+
+  const allTags = useMemo(() => {
+    const tags = new Set<string>()
+    for (const f of files) {
+      if (f.description) {
+        const matches = f.description.match(/#[\w\u00C0-\u024F]+/g)
+        if (matches) matches.forEach(m => tags.add(m.substring(1).toLowerCase()))
+      }
+    }
+    return Array.from(tags).sort()
+  }, [files])
 
   const toggleTrash = useCallback(() => {
     if (!showTrash) loadTrash()
@@ -366,7 +377,7 @@ export default function FileManager({ files = [], onUpload, onDelete, onUpdate, 
     const items = e.clipboardData?.items
     if (!items) return
     const pastedFiles = []
-    for (const item of Array.from(items)) {
+    for (const item of Array.from(items) as DataTransferItem[]) {
       if (item.kind === 'file') {
         const file = item.getAsFile()
         if (file) pastedFiles.push(file)
@@ -380,10 +391,16 @@ export default function FileManager({ files = [], onUpload, onDelete, onUpdate, 
 
   const filteredFiles = files.filter(f => {
     if (filterType === 'starred') return !!f.starred
-    if (filterType === 'pdf') return f.mime_type === 'application/pdf'
+    if (filterType === 'pdf') return (f.mime_type || '').includes('pdf') || /\.pdf$/i.test(f.original_name)
     if (filterType === 'image') return isImage(f.mime_type)
-    if (filterType === 'doc') return (f.mime_type || '').includes('word') || (f.mime_type || '').includes('excel') || (f.mime_type || '').includes('text')
+    if (filterType === 'doc') return /\.(docx?|xlsx?|txt|csv)$/i.test(f.original_name)
     if (filterType === 'collab') return !!f.note_id
+    if (filterType.startsWith('tag:')) {
+      const targetTag = filterType.substring(4)
+      if (!f.description) return false
+      const tags = (f.description.match(/#[\w\u00C0-\u024F]+/g) || []).map(t => t.substring(1).toLowerCase())
+      return tags.includes(targetTag)
+    }
     return true
   })
 
@@ -488,7 +505,13 @@ export default function FileManager({ files = [], onUpload, onDelete, onUpdate, 
           </div>
 
           {file.description && (
-            <p style={{ fontSize: 11.5, color: 'var(--text-faint)', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.description}</p>
+            <p style={{ fontSize: 11.5, color: 'var(--text-faint)', margin: '4px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', gap: 4, alignItems: 'center' }}>
+              {file.description.split(/(#[\w\u00C0-\u024F]+)/g).map((part, i) => 
+                part.startsWith('#') 
+                  ? <span key={i} style={{ color: 'var(--bg-primary)', background: 'var(--text-secondary)', padding: '1px 6px', borderRadius: 6, fontWeight: 600, fontSize: 10 }}>{part}</span> 
+                  : part
+              )}
+            </p>
           )}
 
           <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
@@ -496,15 +519,15 @@ export default function FileManager({ files = [], onUpload, onDelete, onUpdate, 
             <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>{formatDateWithLocale(file.created_at, locale)}</span>
 
             {linkedPlaces.map(p => (
-              <SourceBadge key={p.id} icon={MapPin} label={`${t('files.sourcePlan')} · ${p.name}`} />
+              <SourceBadge key={p.id} icon={MapPin as any} label={`${t('files.sourcePlan')} · ${p.name}`} />
             ))}
             {linkedReservations.map(r => (
               TRANSPORT_TYPES.has(r.type)
-                ? <SourceBadge key={r.id} icon={transportIcon(r.type)} label={`${t('files.sourceTransport')} · ${r.title || t('files.sourceTransport')}`} />
-                : <SourceBadge key={r.id} icon={Ticket} label={`${t('files.sourceBooking')} · ${r.title || t('files.sourceBooking')}`} />
+                ? <SourceBadge key={r.id} icon={transportIcon(r.type) as any} label={`${t('files.sourceTransport')} · ${r.title || t('files.sourceTransport')}`} />
+                : <SourceBadge key={r.id} icon={Ticket as any} label={`${t('files.sourceBooking')} · ${r.title || t('files.sourceBooking')}`} />
             ))}
             {file.note_id && (
-              <SourceBadge icon={StickyNote} label={t('files.sourceCollab') || 'Collab Notes'} />
+              <SourceBadge icon={StickyNote as any} label={t('files.sourceCollab') || 'Collab Notes'} />
             )}
           </div>
         </div>
@@ -554,7 +577,7 @@ export default function FileManager({ files = [], onUpload, onDelete, onUpdate, 
   return (
     <div className="flex flex-col h-full" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif" }} onPaste={handlePaste} tabIndex={-1}>
       {/* Lightbox */}
-      {lightboxIndex !== null && <ImageLightbox files={imageFiles} initialIndex={lightboxIndex} onClose={() => setLightboxIndex(null)} />}
+      {lightboxIndex !== null && <ImageLightbox files={imageFiles as any} initialIndex={lightboxIndex} onClose={() => setLightboxIndex(null)} />}
 
       {/* Assign modal */}
       {assignFileId && ReactDOM.createPortal(
@@ -633,7 +656,7 @@ export default function FileManager({ files = [], onUpload, onDelete, onUpdate, 
                           await handleAssign(file.id, { place_id: p.id })
                         } else {
                           try {
-                            await filesApi.addLink(tripId, file.id, { place_id: p.id })
+                            await filesApi.addLink(tripId, file.id, { place_id: p.id } as any)
                             refreshFiles()
                           } catch {}
                         }
@@ -837,6 +860,7 @@ export default function FileManager({ files = [], onUpload, onDelete, onUpdate, 
                   { id: 'image', label: t('files.filterImages') },
                   { id: 'doc', label: t('files.filterDocs') },
                   ...(files.some(f => f.note_id) ? [{ id: 'collab', label: t('files.filterCollab') || 'Collab' }] : []),
+                  ...allTags.map(tag => ({ id: `tag:${tag}`, label: `#${tag}` })),
                 ].map(tab => {
                   const active = filterType === tab.id
                   const TabIcon = 'icon' in tab ? tab.icon : null
@@ -846,6 +870,7 @@ export default function FileManager({ files = [], onUpload, onDelete, onUpdate, 
                     : tab.id === 'image' ? files.filter(f => (f.mime_type || '').startsWith('image/')).length
                     : tab.id === 'doc' ? files.filter(f => /\.(docx?|xlsx?|txt|csv)$/i.test(f.original_name)).length
                     : tab.id === 'collab' ? files.filter(f => f.note_id).length
+                    : tab.id.startsWith('tag:') ? files.filter(f => f.description && (f.description.match(/#[\w\u00C0-\u024F]+/g) || []).map(t => t.substring(1).toLowerCase()).includes(tab.id.substring(4))).length
                     : 0
                   return (
                     <button key={tab.id} onClick={() => setFilterType(tab.id)}
@@ -945,7 +970,7 @@ export default function FileManager({ files = [], onUpload, onDelete, onUpdate, 
                 <p style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500, margin: 0 }}>{t('files.dropzone')}</p>
                 <p style={{ fontSize: 11.5, color: 'var(--text-faint)', marginTop: 3 }}>{t('files.dropzoneHint')}</p>
                 <p style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 6, opacity: 0.7 }}>
-                  {(allowedFileTypes || 'jpg,jpeg,png,gif,webp,heic,pdf,doc,docx,xls,xlsx,txt,csv').toUpperCase().split(',').join(', ')} · Max 50 MB
+                  {((Array.isArray(allowedFileTypes) ? allowedFileTypes.join(', ') : allowedFileTypes) || 'jpg,jpeg,png,gif,webp,heic,pdf,doc,docx,xls,xlsx,txt,csv').toUpperCase().split(',').join(', ')} · Max 50 MB
                 </p>
               </>
             )}

@@ -9,7 +9,10 @@ import { useToast } from '../shared/Toast'
 import { Search, Paperclip, X, AlertTriangle, Loader2 } from 'lucide-react'
 import { useTranslation } from '../../i18n'
 import CustomTimePicker from '../shared/CustomTimePicker'
+import LocationPickerMap from '../Map/LocationPickerMap'
 import type { Place, Category, Assignment } from '../../types'
+
+import { getDefaultDurationForCategoryIcon } from '../../utils/categoryDefaults'
 
 interface PlaceFormData {
   name: string
@@ -21,8 +24,12 @@ interface PlaceFormData {
   place_time: string
   end_time: string
   notes: string
-  transport_mode: string
+  duration_minutes: string
+  time_locked: boolean
   website: string
+  google_place_id?: string
+  osm_id?: string
+  phone?: string
 }
 
 function isGoogleMapsUrl(input: string): boolean {
@@ -54,19 +61,20 @@ const DEFAULT_FORM: PlaceFormData = {
   place_time: '',
   end_time: '',
   notes: '',
-  transport_mode: 'walking',
+  duration_minutes: '60',
+  time_locked: false,
   website: '',
 }
 
 interface PlaceFormModalProps {
   isOpen: boolean
   onClose: () => void
-  onSave: (data: PlaceFormData, files?: File[]) => Promise<void> | void
+  onSave: (data: Partial<Place> & { _pendingFiles?: File[] }, files?: File[]) => Promise<void> | void
   place: Place | null
   prefillCoords?: { lat?: number; lng?: number; name?: string; address?: string; description?: string } | null
   tripId: number
   categories: Category[]
-  onCategoryCreated: (category: Category) => void
+  onCategoryCreated: (category: Partial<Category>) => Promise<Category | void> | void | any
   assignmentId: number | null
   dayAssignments?: Assignment[]
 }
@@ -101,13 +109,14 @@ export default function PlaceFormModal({
         name: place.name || '',
         description: place.description || '',
         address: place.address || '',
-        lat: place.lat || '',
-        lng: place.lng || '',
-        category_id: place.category_id || '',
+        lat: place.lat != null ? String(place.lat) : '',
+        lng: place.lng != null ? String(place.lng) : '',
+        category_id: place.category_id != null ? String(place.category_id) : '',
         place_time: place.place_time || '',
         end_time: place.end_time || '',
         notes: place.notes || '',
-        transport_mode: place.transport_mode || 'walking',
+        duration_minutes: place.duration_minutes != null ? String(place.duration_minutes) : '60',
+        time_locked: !!place.time_locked,
         website: place.website || '',
       })
     } else if (prefillCoords) {
@@ -163,8 +172,20 @@ export default function PlaceFormModal({
     const controller = new AbortController()
     acAbortRef.current = controller
     try {
-      const result = await mapsApi.autocomplete(query, language, locationBias, controller.signal)
-      setAcSuggestions(result.suggestions || [])
+      let result = await mapsApi.autocomplete(query, language, locationBias, controller.signal)
+      let suggestions = result.suggestions || []
+      
+      // Fallback: If Autocomplete fails to find semantic matches across languages, use Text Search
+      if (suggestions.length === 0) {
+        const searchResult = await mapsApi.search(query, language, controller.signal)
+        suggestions = (searchResult.places || []).slice(0, 5).map((p: any) => ({
+          placeId: p.google_place_id || p.osm_id,
+          mainText: p.name,
+          secondaryText: p.address,
+        }))
+      }
+      
+      setAcSuggestions(suggestions)
       setAcHighlight(-1)
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return
@@ -192,8 +213,18 @@ export default function PlaceFormModal({
     }
   }, [mapsSearch, fetchSuggestions])
 
-  const handleChange = (field, value) => {
-    setForm(prev => ({ ...prev, [field]: value }))
+
+  const handleChange = <K extends keyof PlaceFormData>(field: K, value: PlaceFormData[K]) => {
+    setForm(prev => {
+      const next = { ...prev, [field]: value }
+      if (field === 'category_id' && !place) {
+        const cat = categories.find(c => String(c.id) === value)
+        if (cat) {
+          next.duration_minutes = String(getDefaultDurationForCategoryIcon(cat.icon))
+        }
+      }
+      return next
+    })
   }
 
   const handleMapsSearch = async () => {
@@ -267,6 +298,18 @@ export default function PlaceFormModal({
     }
   }
 
+  const handleMapClick = async (lat: number, lng: number) => {
+    setForm(prev => ({ ...prev, lat: String(lat), lng: String(lng) }))
+    try {
+      const res = await mapsApi.reverse(lat, lng, language)
+      if (res && res.address) {
+        setForm(prev => ({ ...prev, address: res.address, name: prev.name || res.name || res.address }))
+      }
+    } catch (err) {
+      console.error('Reverse geocoding failed', err)
+    }
+  }
+
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {
     if (acSuggestions.length > 0) {
       if (e.key === 'ArrowDown') {
@@ -320,7 +363,7 @@ export default function PlaceFormModal({
     if (!canUploadFiles) return
     const items = e.clipboardData?.items
     if (!items) return
-    for (const item of Array.from(items)) {
+    for (const item of Array.from(items) as DataTransferItem[]) {
       if (item.type.startsWith('image/') || item.type === 'application/pdf') {
         e.preventDefault()
         const file = item.getAsFile()
@@ -344,7 +387,9 @@ export default function PlaceFormModal({
         ...form,
         lat: form.lat ? parseFloat(form.lat) : null,
         lng: form.lng ? parseFloat(form.lng) : null,
-        category_id: form.category_id || null,
+        category_id: form.category_id ? Number(form.category_id) : null,
+        duration_minutes: form.duration_minutes ? Number(form.duration_minutes) : null,
+        time_locked: form.time_locked,
         _pendingFiles: pendingFiles.length > 0 ? pendingFiles : undefined,
       })
       onClose()
@@ -360,7 +405,7 @@ export default function PlaceFormModal({
       isOpen={isOpen}
       onClose={onClose}
       title={place ? t('places.editPlace') : t('places.addPlace')}
-      size="lg"
+      size="3xl"
       footer={
         <div className="flex justify-end gap-3">
           <button
@@ -381,10 +426,13 @@ export default function PlaceFormModal({
         </div>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-4" onPaste={handlePaste}>
-        {/* Place Search */}
-        <div className="bg-slate-50 rounded-xl p-3 border border-slate-200">
-          {!hasMapsKey && (
+      <form onSubmit={handleSubmit} onPaste={handlePaste}>
+        <div className="flex flex-col lg:flex-row gap-6">
+          {/* Left Column: Form */}
+          <div className="flex-1 space-y-4 min-w-0 pb-4">
+            {/* Place Search */}
+            <div className="bg-slate-50 rounded-xl p-3 border border-slate-200">
+              {!hasMapsKey && (
             <p className="mb-2 text-xs" style={{ color: 'var(--text-faint)' }}>
               {t('places.osmActive')}
             </p>
@@ -552,7 +600,7 @@ export default function PlaceFormModal({
                 options={[
                   { value: '', label: t('places.noCategory') },
                   ...(categories || []).map(c => ({
-                    value: c.id,
+                    value: String(c.id),
                     label: c.name,
                   })),
                 ]}
@@ -632,7 +680,18 @@ export default function PlaceFormModal({
             )}
           </div>
         )}
+          </div>
 
+          {/* Right Column: Map */}
+          <div className="w-full lg:w-[450px] xl:w-[500px] h-[350px] lg:h-auto min-h-[350px] flex-shrink-0">
+            <LocationPickerMap
+              lat={form.lat ? Number(form.lat) : null}
+              lng={form.lng ? Number(form.lng) : null}
+              onChange={handleMapClick}
+              centerCoords={prefillCoords && prefillCoords.lat && prefillCoords.lng ? { lat: prefillCoords.lat, lng: prefillCoords.lng } : undefined}
+            />
+          </div>
+        </div>
       </form>
     </Modal>
   )
@@ -640,7 +699,7 @@ export default function PlaceFormModal({
 
 interface TimeSectionProps {
   form: PlaceFormData
-  handleChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => void
+  handleChange: (field: string, value: string) => void
   assignmentId: number | null
   dayAssignments: Assignment[]
   hasTimeError: boolean
@@ -685,6 +744,28 @@ function TimeSection({ form, handleChange, assignmentId, dayAssignments, hasTime
             value={form.end_time}
             onChange={v => handleChange('end_time', v)}
           />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t('dashboard.mobile.duration')} (min)</label>
+          <input
+            type="number"
+            value={form.duration_minutes}
+            onChange={e => handleChange('duration_minutes', e.target.value)}
+            placeholder="60"
+            className="form-input"
+          />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingTop: 24 }}>
+          <input
+            type="checkbox"
+            id="time_locked_checkbox"
+            checked={form.time_locked}
+            onChange={e => handleChange('time_locked', e.target.checked as any)}
+            style={{ width: 16, height: 16, accentColor: 'var(--text-primary)', cursor: 'pointer' }}
+          />
+          <label htmlFor="time_locked_checkbox" style={{ fontSize: 13, color: 'var(--text-primary)', cursor: 'pointer', userSelect: 'none' }}>
+            Lock Time
+          </label>
         </div>
       </div>
       {hasTimeError && (

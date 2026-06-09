@@ -38,6 +38,8 @@ import { filesApi } from '../../api/client';
 
 const buildFile = (overrides = {}) => ({
   id: 1,
+  trip_id: 1,
+  filename: 'report.pdf',
   original_name: 'report.pdf',
   mime_type: 'application/pdf',
   file_size: 51200,
@@ -487,7 +489,7 @@ describe('FileManager', () => {
     const { buildPlace, buildDay } = await import('../../../tests/helpers/factories');
     const place = buildPlace({ id: 10, name: 'Arc de Triomphe' });
     const day = buildDay({ id: 5, date: '2025-06-01', day_number: 1 });
-    const assignments = { '5': [{ id: 1, day_id: 5, place_id: 10, order_index: 0, place }] };
+    const assignments = { '5': [{ id: 1, day_id: 5, place_id: 10, order_index: 0, notes: null, place }] } as any;
 
     render(<FileManager {...defaultProps} files={[buildFile()]} places={[place]} days={[day]} assignments={assignments} />);
     const user = userEvent.setup();

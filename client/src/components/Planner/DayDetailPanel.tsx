@@ -59,9 +59,10 @@ interface DayDetailPanelProps {
   collapsed?: boolean
   onToggleCollapse?: () => void
   mobile?: boolean
+  routeSegments?: any[]
 }
 
-export default function DayDetailPanel({ day, days, places, categories = [], tripId, assignments, reservations = [], lat, lng, onClose, onAccommodationChange, leftWidth = 0, rightWidth = 0, collapsed: collapsedProp = false, onToggleCollapse, mobile = false }: DayDetailPanelProps) {
+export default function DayDetailPanel({ day, days, places, categories = [], tripId, assignments, reservations = [], lat, lng, onClose, onAccommodationChange, leftWidth = 0, rightWidth = 0, collapsed: collapsedProp = false, onToggleCollapse, mobile = false, routeSegments }: DayDetailPanelProps) {
   const { t, language, locale } = useTranslation()
   const can = useCanDo()
   const tripObj = useTripStore((s) => s.trip)
@@ -82,9 +83,9 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
   const [accommodation, setAccommodation] = useState(null)
   const [dayAccommodations, setDayAccommodations] = useState<any[]>([])
   const [accommodations, setAccommodations] = useState([])
-  const [showHotelPicker, setShowHotelPicker] = useState(false)
+  const [showHotelPicker, setShowHotelPicker] = useState<boolean | 'edit'>(false)
   const [hotelDayRange, setHotelDayRange] = useState({ start: day?.id, end: day?.id })
-  const [hotelCategoryFilter, setHotelCategoryFilter] = useState('')
+  const [hotelCategoryFilter, setHotelCategoryFilter] = useState<string | number>('')
   const [hotelForm, setHotelForm] = useState({ check_in: '', check_in_end: '', check_out: '', confirmation: '', place_id: null })
 
   useEffect(() => {
@@ -474,10 +475,10 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <CustomSelect
-                          value={hotelDayRange.start}
-                          onChange={v => setHotelDayRange(prev => ({ start: v, end: days.findIndex(d => d.id === v) > days.findIndex(d => d.id === prev.end) ? v : prev.end }))}
+                          value={String(hotelDayRange.start)}
+                          onChange={v => setHotelDayRange(prev => ({ start: Number(v), end: days.findIndex(d => d.id === Number(v)) > days.findIndex(d => d.id === prev.end) ? Number(v) : prev.end }))}
                           options={days.map((d, i) => ({
-                            value: d.id,
+                            value: String(d.id),
                             label: d.title || t('planner.dayN', { n: i + 1 }),
                             badge: d.date
                               ? new Date(d.date + 'T00:00:00Z').toLocaleDateString(locale, { day: 'numeric', month: 'short', timeZone: 'UTC' })
@@ -489,10 +490,10 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
                       <span style={{ fontSize: 11, color: 'var(--text-faint)', flexShrink: 0 }}>→</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <CustomSelect
-                          value={hotelDayRange.end}
-                          onChange={v => setHotelDayRange(prev => ({ start: days.findIndex(d => d.id === v) < days.findIndex(d => d.id === prev.start) ? v : prev.start, end: v }))}
+                          value={String(hotelDayRange.end)}
+                          onChange={v => setHotelDayRange(prev => ({ start: days.findIndex(d => d.id === Number(v)) < days.findIndex(d => d.id === prev.start) ? Number(v) : prev.start, end: Number(v) }))}
                           options={days.map((d, i) => ({
-                            value: d.id,
+                            value: String(d.id),
                             label: d.title || t('planner.dayN', { n: i + 1 }),
                             badge: d.date
                               ? new Date(d.date + 'T00:00:00Z').toLocaleDateString(locale, { day: 'numeric', month: 'short', timeZone: 'UTC' })
@@ -554,7 +555,7 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
                   {/* Place List */}
                   <div style={{ maxHeight: 250, overflowY: 'auto' }}>
                     {(() => {
-                      const filtered = hotelCategoryFilter ? places.filter(p => p.category_id === hotelCategoryFilter) : places
+                      const filtered = hotelCategoryFilter ? places.filter(p => String(p.category_id) === String(hotelCategoryFilter)) : places
                       return filtered.length === 0 ? (
                         <div style={{ padding: 20, textAlign: 'center', fontSize: 12, color: 'var(--text-faint)' }}>{t('day.noPlacesForHotel')}</div>
                       ) : filtered.map(p => (
@@ -641,7 +642,7 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
 }
 
 interface ChipProps {
-  icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }>
+  icon: any
   value: string
 }
 

@@ -16,6 +16,7 @@ import SlidingTabs from '../components/shared/SlidingTabs'
 import TripMembersModal from '../components/Trips/TripMembersModal'
 import { ReservationModal } from '../components/Planner/ReservationModal'
 import { TransportModal } from '../components/Planner/TransportModal'
+import CalendarView from '../components/Planner/CalendarView'
 // MemoriesPanel moved to Journey addon
 import ReservationsPanel from '../components/Planner/ReservationsPanel'
 import PackingListPanel from '../components/Packing/PackingListPanel'
@@ -24,9 +25,10 @@ import TodoListPanel from '../components/Todo/TodoListPanel'
 import FileManager from '../components/Files/FileManager'
 import BudgetPanel from '../components/Budget/BudgetPanel'
 import CollabPanel from '../components/Collab/CollabPanel'
+import SkiItineraryPlanner from '../components/AI/SkiItineraryPlanner'
 import Navbar from '../components/Layout/Navbar'
 import { useToast } from '../components/shared/Toast'
-import { Map, X, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Ticket, PackageCheck, Wallet, FolderOpen, Users, Train } from 'lucide-react'
+import { Map, X, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Ticket, PackageCheck, Wallet, FolderOpen, Users, Train, Calendar, MountainSnow } from 'lucide-react'
 import { useTranslation } from '../i18n'
 import { addonsApi, accommodationsApi, authApi, tripsApi, assignmentsApi, mapsApi } from '../api/client'
 import { accommodationRepo } from '../repo/accommodationRepo'
@@ -38,7 +40,7 @@ import { useTripWebSocket } from '../hooks/useTripWebSocket'
 import { useRouteCalculation } from '../hooks/useRouteCalculation'
 import { usePlaceSelection } from '../hooks/usePlaceSelection'
 import { usePlannerHistory } from '../hooks/usePlannerHistory'
-import type { Accommodation, TripMember, Day, Place, Reservation, PackingItem, TodoItem } from '../types'
+import type { Accommodation, TripMember, Day, Place, Reservation, PackingItem, TodoItem, Assignment } from '../types'
 import { ListTodo, Upload, Plus, Trash2, FolderPlus } from 'lucide-react'
 
 function ListsContainer({ tripId, packingItems, todoItems }: { tripId: number; packingItems: PackingItem[]; todoItems: TodoItem[] }) {
@@ -212,7 +214,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
 
   useEffect(() => {
     addonsApi.enabled().then(data => {
-      const map = {}
+      const map: Record<string, boolean> = {}
       data.addons.forEach(a => { map[a.id] = true })
       setEnabledAddons({ packing: !!map.packing, budget: !!map.budget, documents: !!map.documents, collab: !!map.collab })
       if (data.collabFeatures) setCollabFeatures(data.collabFeatures)
@@ -226,12 +228,14 @@ export default function TripPlannerPage(): React.ReactElement | null {
 
   const TRIP_TABS = [
     { id: 'plan', label: t('trip.tabs.plan'), icon: Map },
+    { id: 'calendar', label: t('trip.tabs.calendar') || 'Calendar', icon: Calendar },
     { id: 'transports', label: t('trip.tabs.transports'), icon: Train },
     { id: 'buchungen', label: t('trip.tabs.reservations'), shortLabel: t('trip.tabs.reservationsShort'), icon: Ticket },
     ...(enabledAddons.packing ? [{ id: 'listen', label: t('trip.tabs.lists'), shortLabel: t('trip.tabs.listsShort'), icon: PackageCheck }] : []),
     ...(enabledAddons.budget ? [{ id: 'finanzplan', label: t('trip.tabs.budget'), icon: Wallet }] : []),
     ...(enabledAddons.documents ? [{ id: 'dateien', label: t('trip.tabs.files'), icon: FolderOpen }] : []),
     ...(enabledAddons.collab ? [{ id: 'collab', label: t('admin.addons.catalog.collab.name'), icon: Users }] : []),
+    { id: 'ski', label: '滑雪規劃', shortLabel: '滑雪', icon: MountainSnow },
   ]
 
   const [activeTab, setActiveTab] = useState<string>(() => {
@@ -400,7 +404,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
 
   const { route, routeSegments, routeInfo, setRoute, setRouteInfo, updateRouteForDay } = useRouteCalculation({ assignments } as any, selectedDayId)
 
-  const handleSelectDay = useCallback((dayId, skipFit) => {
+  const handleSelectDay = useCallback((dayId: number | null, skipFit?: boolean) => {
     const changed = dayId !== selectedDayId
     tripActions.setSelectedDay(dayId)
     if (changed && !skipFit) setFitKey(k => k + 1)
@@ -430,7 +434,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
     const matching = allAssignments.filter(a => a?.place?.id === placeId)
 
     if (matching.length === 0) {
-      setSelectedPlaceId(prev => prev === placeId ? null : placeId)
+      setSelectedPlaceId(selectedPlaceId === placeId ? null : placeId)
     } else if (matching.length === 1) {
       const only = matching[0]
       if (selectedAssignmentId === only.id) {
@@ -490,7 +494,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
         for (const file of pendingFiles) {
           const fd = new FormData()
           fd.append('file', file)
-          fd.append('place_id', editingPlace.id)
+          fd.append('place_id', String(editingPlace.id))
           try { await tripActions.addFile(tripId, fd) } catch {}
         }
       }
@@ -501,7 +505,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
         for (const file of pendingFiles) {
           const fd = new FormData()
           fd.append('file', file)
-          fd.append('place_id', place.id)
+          fd.append('place_id', String(place.id))
           try { await tripActions.addFile(tripId, fd) } catch {}
         }
       }
@@ -582,7 +586,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
     } catch (err: unknown) { toast.error(err instanceof Error ? err.message : t('common.unknownError')) }
   }, [deletePlaceIds, tripId, toast, selectedPlaceId, selectedDayId, updateRouteForDay, pushUndo])
 
-  const handleAssignToDay = useCallback(async (placeId, dayId, position) => {
+  const handleAssignToDay = useCallback(async (placeId: number, dayId: number, position?: number) => {
     const target = dayId || selectedDayId
     if (!target) { toast.error(t('trip.toast.selectDay')); return }
     try {
@@ -795,7 +799,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
             id: tab.id,
             label: <span className="hidden sm:inline">{tab.shortLabel || tab.label}</span>,
             title: tab.label,
-            icon: tab.icon,
+            icon: tab.icon as any,
           }))}
           activeTab={activeTab}
           onChange={handleTabChange}
@@ -862,7 +866,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
                 opacity: leftCollapsed ? 0 : 1,
               }}>
                 <DayPlanSidebar
-                  tripId={tripId}
+                  tripId={Number(tripId)}
                   trip={trip}
                   days={days}
                   places={places}
@@ -871,26 +875,27 @@ export default function TripPlannerPage(): React.ReactElement | null {
                   selectedDayId={selectedDayId}
                   selectedPlaceId={selectedPlaceId}
                   selectedAssignmentId={selectedAssignmentId}
-                  onSelectDay={handleSelectDay}
-                  onPlaceClick={handlePlaceClick}
+                  onSelectDay={(id) => handleSelectDay(id, false)}
+                  onPlaceClick={(id, assignmentId) => handlePlaceClick(id, assignmentId ?? null)}
                   onReorder={handleReorder}
                   onUpdateDayTitle={handleUpdateDayTitle}
-                  onAssignToDay={handleAssignToDay}
-                  onRouteCalculated={(r) => { if (r) { setRoute([r.coordinates]); setRouteInfo({ distance: r.distanceText, duration: r.durationText, walkingText: r.walkingText, drivingText: r.drivingText }) } else { setRoute(null); setRouteInfo(null) } }}
+                  onAssignToDay={(placeId: number, dayId: number, position?: number) => handleAssignToDay(placeId, dayId, position)}
+                  routeSegments={routeSegments}
+                  onRouteCalculated={(r: any) => { if (r) { setRoute(r.coordinates); setRouteInfo(r) } else { setRoute(null); setRouteInfo(null) } }}
                   reservations={reservations}
                   visibleConnectionIds={visibleConnections}
                   onToggleConnection={toggleConnection}
                   externalTransportDetail={mapTransportDetail}
                   onExternalTransportDetailHandled={() => setMapTransportDetail(null)}
-                  onAddReservation={(dayId) => { setEditingReservation(null); tripActions.setSelectedDay(dayId); setShowReservationModal(true) }}
+                  onAddReservation={() => { setEditingReservation(null); tripActions.setSelectedDay(selectedDayId); setShowReservationModal(true) }}
                   onAddTransport={can('day_edit', trip) ? (dayId) => { setTransportModalDayId(dayId); setEditingTransport(null); setShowTransportModal(true) } : undefined}
                   onEditTransport={can('day_edit', trip) ? (reservation) => { setEditingTransport(reservation); setTransportModalDayId(reservation.day_id ?? null); setShowTransportModal(true) } : undefined}
                   onEditReservation={can('reservation_edit', trip) ? (r) => { setEditingReservation(r); setShowReservationModal(true) } : undefined}
-                  onDayDetail={(day) => { setShowDayDetail(day); setSelectedPlaceId(null); selectAssignment(null) }}
+                  onDayDetail={(day) => { setShowDayDetail(day); setSelectedPlaceId(null); }}
                   onRemoveAssignment={handleRemoveAssignment}
-                  onEditPlace={(place, assignmentId) => { setEditingPlace(place); setEditingAssignmentId(assignmentId || null); setShowPlaceForm(true) }}
+                  onEditPlace={(place: Place, assignmentId?: number | null) => { setEditingPlace(place); setEditingAssignmentId(assignmentId ?? null); setShowPlaceForm(true) }}
                   onDeletePlace={(placeId) => handleDeletePlace(placeId)}
-                  accommodations={tripAccommodations}
+                  accommodations={tripAccommodations as any}
                   onNavigateToFiles={() => handleTabChange('dateien')}
                   onExpandedDaysChange={setExpandedDayIds}
                   pushUndo={pushUndo}
@@ -947,16 +952,18 @@ export default function TripPlannerPage(): React.ReactElement | null {
                 )}
                 <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', paddingLeft: 4 }}>
                   <PlacesSidebar
-                    tripId={tripId}
+                    tripId={Number(tripId)}
+                    days={days}
+                    isMobile={false}
                     places={places}
                     categories={categories}
                     assignments={assignments}
                     selectedDayId={selectedDayId}
                     selectedPlaceId={selectedPlaceId}
-                    onPlaceClick={handlePlaceClick}
+                    onPlaceClick={(placeId, assignmentId) => handlePlaceClick(placeId, assignmentId ?? null)}
                     onAddPlace={(prefill) => { setEditingPlace(null); setPrefillCoords(prefill || null); setShowPlaceForm(true) }}
-                    onAssignToDay={handleAssignToDay}
-                    onEditPlace={(place) => { setEditingPlace(place); setEditingAssignmentId(null); setShowPlaceForm(true) }}
+                    onAssignToDay={(placeId: number, dayId: number, position?: number) => handleAssignToDay(placeId, dayId, position)}
+                    onEditPlace={(place, assignmentId?: number | null) => { setEditingPlace(place); setEditingAssignmentId(assignmentId ?? null); setShowPlaceForm(true) }}
                     onDeletePlace={(placeId) => handleDeletePlace(placeId)}
                     onBulkDeletePlaces={(ids) => setDeletePlaceIds(ids)}
                     onCategoryFilterChange={setMapCategoryFilter}
@@ -992,18 +999,19 @@ export default function TripPlannerPage(): React.ReactElement | null {
                   days={days}
                   places={places}
                   categories={categories}
-                  tripId={tripId}
+                  tripId={Number(tripId)}
                   assignments={assignments}
                   reservations={reservations}
                   lat={geoPlace?.lat}
                   lng={geoPlace?.lng}
-                  onClose={() => { setShowDayDetail(null); handleSelectDay(null) }}
+                  onClose={() => { setShowDayDetail(null); handleSelectDay(null, false) }}
                   onAccommodationChange={loadAccommodations}
                   leftWidth={isMobile ? 0 : (leftCollapsed ? 0 : leftWidth)}
                   rightWidth={isMobile ? 0 : (rightCollapsed ? 0 : rightWidth)}
                   collapsed={dayDetailCollapsed}
                   onToggleCollapse={() => setDayDetailCollapsed(c => !c)}
                   mobile={isMobile}
+                  routeSegments={routeSegments}
                 />
               )
             })()}
@@ -1030,10 +1038,10 @@ export default function TripPlannerPage(): React.ReactElement | null {
                   setShowPlaceForm(true)
                 }}
                 onDelete={() => handleDeletePlace(selectedPlace.id)}
-                onAssignToDay={handleAssignToDay}
+                onAssignToDay={(placeId: number, dayId: number) => handleAssignToDay(placeId, dayId)}
                 onRemoveAssignment={handleRemoveAssignment}
                 files={files}
-                onFileUpload={canUploadFiles ? (fd) => tripActions.addFile(tripId, fd) : undefined}
+                onFileUpload={canUploadFiles ? async (fd) => { await tripActions.addFile(tripId, fd); return {} as any; } : undefined}
                 tripMembers={tripMembers}
                 onSetParticipants={async (assignmentId, dayId, userIds) => {
                   try {
@@ -1079,10 +1087,10 @@ export default function TripPlannerPage(): React.ReactElement | null {
                       setSelectedPlaceId(null)
                     }}
                     onDelete={() => { handleDeletePlace(selectedPlace.id); setSelectedPlaceId(null) }}
-                    onAssignToDay={handleAssignToDay}
+                    onAssignToDay={(placeId: number, dayId: number) => handleAssignToDay(placeId, dayId)}
                     onRemoveAssignment={handleRemoveAssignment}
                     files={files}
-                    onFileUpload={canUploadFiles ? (fd) => tripActions.addFile(tripId, fd) : undefined}
+                    onFileUpload={canUploadFiles ? async (fd) => { await tripActions.addFile(tripId, fd); return {} as any; } : undefined}
                     tripMembers={tripMembers}
                     onSetParticipants={async (assignmentId, dayId, userIds) => {
                       try {
@@ -1117,8 +1125,8 @@ export default function TripPlannerPage(): React.ReactElement | null {
                   </div>
                   <div style={{ flex: 1, overflow: 'auto' }}>
                     {mobileSidebarOpen === 'left'
-                      ? <DayPlanSidebar tripId={tripId} trip={trip} days={days} places={places} categories={categories} assignments={assignments} selectedDayId={selectedDayId} selectedPlaceId={selectedPlaceId} selectedAssignmentId={selectedAssignmentId} onSelectDay={(id) => { handleSelectDay(id); setMobileSidebarOpen(null) }} onPlaceClick={(placeId, assignmentId) => { handlePlaceClick(placeId, assignmentId) }} onReorder={handleReorder} onUpdateDayTitle={handleUpdateDayTitle} onAssignToDay={handleAssignToDay} onRouteCalculated={(r) => { if (r) { setRoute(r.coordinates); setRouteInfo({ distance: r.distanceText, duration: r.durationText }) } }} reservations={reservations} visibleConnectionIds={visibleConnections} onToggleConnection={toggleConnection} onAddReservation={(dayId) => { setEditingReservation(null); tripActions.setSelectedDay(dayId); setShowReservationModal(true); setMobileSidebarOpen(null) }} onAddPlace={(prefill) => { setEditingPlace(null); setPrefillCoords(prefill || null); setShowPlaceForm(true); setMobileSidebarOpen(null) }} onDayDetail={(day) => { setShowDayDetail(day); setSelectedPlaceId(null); selectAssignment(null) }} accommodations={tripAccommodations} onNavigateToFiles={() => { setMobileSidebarOpen(null); handleTabChange('dateien') }} onExpandedDaysChange={setExpandedDayIds} pushUndo={pushUndo} canUndo={canUndo} lastActionLabel={lastActionLabel} onUndo={handleUndo} onEditTransport={can('day_edit', trip) ? (reservation) => { setEditingTransport(reservation); setTransportModalDayId(reservation.day_id ?? null); setShowTransportModal(true); setMobileSidebarOpen(null) } : undefined} onEditReservation={can('reservation_edit', trip) ? (r) => { setEditingReservation(r); setShowReservationModal(true); setMobileSidebarOpen(null) } : undefined} initialScrollTop={mobilePlanScrollTopRef.current} onScrollTopChange={(top) => { mobilePlanScrollTopRef.current = top }} />
-                      : <PlacesSidebar tripId={tripId} places={places} categories={categories} assignments={assignments} selectedDayId={selectedDayId} selectedPlaceId={selectedPlaceId} onPlaceClick={(placeId) => { handlePlaceClick(placeId); setMobileSidebarOpen(null) }} onAddPlace={(prefill) => { setEditingPlace(null); setPrefillCoords(prefill || null); setShowPlaceForm(true); setMobileSidebarOpen(null) }} onAssignToDay={handleAssignToDay} onEditPlace={(place) => { setEditingPlace(place); setEditingAssignmentId(null); setShowPlaceForm(true); setMobileSidebarOpen(null) }} onDeletePlace={(placeId) => handleDeletePlace(placeId)} onBulkDeletePlaces={(ids) => setDeletePlaceIds(ids)} onBulkDeleteConfirm={(ids) => confirmDeletePlaces(ids)} days={days} isMobile onCategoryFilterChange={setMapCategoryFilter} onPlacesFilterChange={setMapPlacesFilter} pushUndo={pushUndo} initialScrollTop={mobilePlacesScrollTopRef.current} onScrollTopChange={(top) => { mobilePlacesScrollTopRef.current = top }} />
+                      ? <DayPlanSidebar tripId={Number(tripId)} trip={trip} days={days} places={places} categories={categories} assignments={assignments} selectedDayId={selectedDayId} selectedPlaceId={selectedPlaceId} selectedAssignmentId={selectedAssignmentId} onSelectDay={(id) => handleSelectDay(id, false)} onPlaceClick={(placeId, assignmentId) => handlePlaceClick(placeId, assignmentId ?? null)} onReorder={handleReorder} onUpdateDayTitle={handleUpdateDayTitle} onAssignToDay={(placeId: number, dayId: number, position?: number) => handleAssignToDay(placeId, dayId, position)} onRouteCalculated={(r: any) => { if (r) { setRoute(r.coordinates); setRouteInfo(r) } else { setRoute(null); setRouteInfo(null) } }} reservations={reservations} visibleConnectionIds={visibleConnections} onToggleConnection={toggleConnection} externalTransportDetail={mapTransportDetail} onExternalTransportDetailHandled={() => setMapTransportDetail(null)} onAddReservation={() => { setEditingReservation(null); tripActions.setSelectedDay(selectedDayId); setShowReservationModal(true) }} onAddPlace={() => { setEditingPlace(null); setPrefillCoords(null); setShowPlaceForm(true) }} onDayDetail={(day) => { setShowDayDetail(day); setSelectedPlaceId(null); }} accommodations={tripAccommodations as any} onExpandedDaysChange={setExpandedDayIds} pushUndo={pushUndo} canUndo={canUndo} lastActionLabel={lastActionLabel} onUndo={handleUndo} onEditTransport={can('day_edit', trip) ? (reservation) => { setEditingTransport(reservation); setTransportModalDayId(reservation.day_id ?? null); setShowTransportModal(true) } : undefined} onEditReservation={can('reservation_edit', trip) ? (r) => { setEditingReservation(r); setShowReservationModal(true) } : undefined} onRemoveAssignment={handleRemoveAssignment} onEditPlace={(place, assignmentId?: number | null) => { setEditingPlace(place); setEditingAssignmentId(assignmentId ?? null); setShowPlaceForm(true) }} onDeletePlace={(placeId) => handleDeletePlace(placeId)} routeSegments={routeSegments} />
+                      : <PlacesSidebar tripId={Number(tripId)} places={places} categories={categories} assignments={assignments} selectedDayId={selectedDayId} selectedPlaceId={selectedPlaceId} onPlaceClick={(placeId, assignmentId) => { handlePlaceClick(placeId, assignmentId ?? null); setMobileSidebarOpen(null) }} onAddPlace={() => { setEditingPlace(null); setPrefillCoords(null); setShowPlaceForm(true); setMobileSidebarOpen(null) }} onAssignToDay={(placeId: number, dayId: number, position?: number) => handleAssignToDay(placeId, dayId, position)} onEditPlace={(place, assignmentId?: number | null) => { setEditingPlace(place); setEditingAssignmentId(assignmentId ?? null); setShowPlaceForm(true); setMobileSidebarOpen(null) }} onDeletePlace={(placeId) => handleDeletePlace(placeId)} onBulkDeletePlaces={(ids) => setDeletePlaceIds(ids)} onBulkDeleteConfirm={(ids) => confirmDeletePlaces(ids)} days={days} isMobile onCategoryFilterChange={setMapCategoryFilter} onPlacesFilterChange={setMapPlacesFilter} pushUndo={pushUndo} initialScrollTop={mobilePlacesScrollTopRef.current} onScrollTopChange={(top) => { mobilePlacesScrollTopRef.current = top }} />
                     }
                   </div>
                 </div>
@@ -1128,10 +1136,46 @@ export default function TripPlannerPage(): React.ReactElement | null {
           </div>
         )}
 
+        {activeTab === 'calendar' && (
+          <div style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column', overflowY: 'hidden', paddingBottom: 'var(--bottom-nav-h)' }}>
+            <CalendarView
+              days={days}
+              places={places}
+              assignments={assignments as Record<number, Assignment[]>}
+              reservations={reservations}
+              canEdit={can('day_edit', trip)}
+              onEditPlace={(place, assignmentId) => {
+                setEditingPlace(place)
+                setEditingAssignmentId(assignmentId)
+                setShowPlaceForm(true)
+              }}
+              onRemoveAssignment={handleRemoveAssignment}
+              onEditReservation={(r) => {
+                setEditingReservation(r)
+                setShowReservationModal(true)
+              }}
+              onEditTransport={(r) => {
+                setEditingTransport(r)
+                setTransportModalDayId(r.day_id ?? null)
+                setShowTransportModal(true)
+              }}
+              onDeleteReservation={handleDeleteReservation}
+              onAddReservation={(dayId) => {
+                setEditingReservation(null)
+                tripActions.setSelectedDay(dayId)
+                setShowReservationModal(true)
+              }}
+              onAssignPlace={(placeId, dayId) => {
+                handleAssignToDay(placeId, dayId)
+              }}
+            />
+          </div>
+        )}
+
         {activeTab === 'transports' && (
           <div style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column', overflowY: 'auto', overscrollBehavior: 'contain', paddingBottom: 'var(--bottom-nav-h)' }}>
             <ReservationsPanel
-              tripId={tripId}
+              tripId={Number(tripId)}
               reservations={reservations.filter(r => TRANSPORT_TYPES.has(r.type))}
               days={days}
               assignments={assignments}
@@ -1149,7 +1193,7 @@ export default function TripPlannerPage(): React.ReactElement | null {
         {activeTab === 'buchungen' && (
           <div style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column', overflowY: 'auto', overscrollBehavior: 'contain', paddingBottom: 'var(--bottom-nav-h)' }}>
             <ReservationsPanel
-              tripId={tripId}
+              tripId={Number(tripId)}
               reservations={reservations.filter(r => !TRANSPORT_TYPES.has(r.type))}
               days={days}
               assignments={assignments}
@@ -1164,13 +1208,13 @@ export default function TripPlannerPage(): React.ReactElement | null {
 
         {activeTab === 'listen' && (
           <div style={{ height: '100%', overflowY: 'auto', overscrollBehavior: 'contain', width: '100%', paddingBottom: 'var(--bottom-nav-h)' }}>
-            <ListsContainer tripId={tripId} packingItems={packingItems} todoItems={todoItems} />
+            <ListsContainer tripId={Number(tripId)} packingItems={packingItems} todoItems={todoItems} />
           </div>
         )}
 
         {activeTab === 'finanzplan' && (
           <div style={{ height: '100%', overflowY: 'auto', overscrollBehavior: 'contain', width: '100%', paddingBottom: 'var(--bottom-nav-h)' }}>
-            <BudgetPanel tripId={tripId} tripMembers={tripMembers} />
+            <BudgetPanel tripId={Number(tripId)} tripMembers={tripMembers} />
           </div>
         )}
 
@@ -1185,24 +1229,33 @@ export default function TripPlannerPage(): React.ReactElement | null {
               days={days}
               assignments={assignments}
               reservations={reservations}
-              tripId={tripId}
-              allowedFileTypes={allowedFileTypes}
+              tripId={Number(tripId)}
+              allowedFileTypes={allowedFileTypes as any}
             />
           </div>
         )}
 
         {activeTab === 'collab' && (
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 'var(--bottom-nav-h)', overflow: 'hidden' }}>
-            <CollabPanel tripId={tripId} tripMembers={tripMembers} collabFeatures={collabFeatures} />
+            <CollabPanel tripId={Number(tripId)} tripMembers={tripMembers} collabFeatures={collabFeatures} />
+          </div>
+        )}
+
+        {activeTab === 'ski' && (
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 'var(--bottom-nav-h)', overflow: 'hidden', padding: '16px 28px' }}>
+            <SkiItineraryPlanner 
+              skiPlaces={places.filter(p => p.properties?.type === 'ski_route')} 
+              days={days} 
+            />
           </div>
         )}
       </div>
 
-      <PlaceFormModal isOpen={showPlaceForm} onClose={() => { setShowPlaceForm(false); setEditingPlace(null); setEditingAssignmentId(null); setPrefillCoords(null) }} onSave={handleSavePlace} place={editingPlace} prefillCoords={prefillCoords} assignmentId={editingAssignmentId} dayAssignments={editingAssignmentId ? Object.values(assignments).flat() : []} tripId={tripId} categories={categories} onCategoryCreated={cat => tripActions.addCategory?.(cat)} />
-      <TripFormModal isOpen={showTripForm} onClose={() => setShowTripForm(false)} onSave={async (data) => { await tripActions.updateTrip(tripId, data); toast.success(t('trip.toast.tripUpdated')) }} trip={trip} />
-      <TripMembersModal isOpen={showMembersModal} onClose={() => setShowMembersModal(false)} tripId={tripId} tripTitle={trip?.title} />
-      <ReservationModal isOpen={showReservationModal} onClose={() => { setShowReservationModal(false); setEditingReservation(null); setBookingForAssignmentId(null) }} onSave={handleSaveReservation} reservation={editingReservation} days={days} places={places} assignments={assignments} selectedDayId={selectedDayId} files={files} onFileUpload={canUploadFiles ? (fd) => tripActions.addFile(tripId, fd) : undefined} onFileDelete={(id) => tripActions.deleteFile(tripId, id)} accommodations={tripAccommodations} defaultAssignmentId={bookingForAssignmentId} />
-      {showTransportModal && <TransportModal isOpen={showTransportModal} onClose={() => { setShowTransportModal(false); setEditingTransport(null); setTransportModalDayId(null) }} onSave={handleSaveTransport} reservation={editingTransport} days={days} selectedDayId={transportModalDayId} files={files} onFileUpload={canUploadFiles ? (fd) => tripActions.addFile(tripId, fd) : undefined} onFileDelete={(id) => tripActions.deleteFile(tripId, id)} />}
+      <PlaceFormModal isOpen={showPlaceForm} onClose={() => { setShowPlaceForm(false); setEditingPlace(null); setEditingAssignmentId(null); setPrefillCoords(null) }} onSave={handleSavePlace} place={editingPlace} prefillCoords={prefillCoords} assignmentId={editingAssignmentId} dayAssignments={editingAssignmentId ? Object.values(assignments).flat() : []} tripId={Number(tripId)} categories={categories} onCategoryCreated={cat => tripActions.addCategory?.(cat)} />
+      <TripFormModal isOpen={showTripForm} onClose={() => setShowTripForm(false)} onSave={async (data) => { await tripActions.updateTrip(tripId, data); toast.success(t('trip.toast.tripUpdated')) }} onCoverUpdate={async () => {}} trip={trip as any} />
+      <TripMembersModal isOpen={showMembersModal} onClose={() => setShowMembersModal(false)} tripId={Number(tripId)} tripTitle={trip?.title} />
+      <ReservationModal isOpen={showReservationModal} onClose={() => { setShowReservationModal(false); setEditingReservation(null); setBookingForAssignmentId(null) }} onSave={handleSaveReservation as any} reservation={editingReservation} days={days} places={places} assignments={assignments} selectedDayId={selectedDayId} files={files} onFileUpload={canUploadFiles ? async (fd) => { await tripActions.addFile(tripId, fd) } : undefined} onFileDelete={(id) => tripActions.deleteFile(tripId, id)} accommodations={tripAccommodations} defaultAssignmentId={bookingForAssignmentId} />
+      {showTransportModal && <TransportModal isOpen={showTransportModal} onClose={() => { setShowTransportModal(false); setEditingTransport(null); setTransportModalDayId(null) }} onSave={handleSaveTransport as any} reservation={editingTransport} days={days} selectedDayId={transportModalDayId} files={files} onFileUpload={canUploadFiles ? async (fd) => { await tripActions.addFile(tripId, fd) } : undefined} onFileDelete={(id) => tripActions.deleteFile(tripId, id)} />}
       <ConfirmDialog
         isOpen={!!deletePlaceId}
         onClose={() => setDeletePlaceId(null)}

@@ -3,14 +3,7 @@ import { Briefcase, Pencil } from 'lucide-react'
 import { useVacayStore } from '../../store/vacayStore'
 import { useAuthStore } from '../../store/authStore'
 import { useTranslation } from '../../i18n'
-import type { VacayStat } from '../../types'
-
-interface VacayStatExtended extends VacayStat {
-  username: string
-  avatar_url: string | null
-  color: string | null
-  total_available: number
-}
+import type { VacayStat, VacayStatExtended } from '../../types'
 
 export default function VacayStats() {
   const { t } = useTranslation()
@@ -55,7 +48,7 @@ interface StatCardProps {
   canEdit: boolean
   selectedYear: number
   onSave: (userId: number, year: number, days: number) => Promise<void>
-  t: (key: string) => string
+  t: (key: string, params?: Record<string, string | number>) => string
 }
 
 function StatCard({ stat: s, isMe, canEdit, selectedYear, onSave, t }: StatCardProps) {
@@ -70,7 +63,7 @@ function StatCard({ stat: s, isMe, canEdit, selectedYear, onSave, t }: StatCardP
 
   const handleSave = () => {
     setEditing(false)
-    const days = parseInt(localDays)
+    const days = typeof localDays === 'string' ? parseInt(localDays) : localDays
     if (!isNaN(days) && days >= 0 && days <= 365 && days !== s.vacation_days) {
       onSave(selectedYear, days, s.user_id)
     }
@@ -110,7 +103,7 @@ function StatCard({ stat: s, isMe, canEdit, selectedYear, onSave, t }: StatCardP
             <input
               type="number"
               value={localDays}
-              onChange={e => setLocalDays(e.target.value)}
+              onChange={e => setLocalDays(Number(e.target.value))}
               onBlur={handleSave}
               onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') { setEditing(false); setLocalDays(s.vacation_days) } }}
               autoFocus

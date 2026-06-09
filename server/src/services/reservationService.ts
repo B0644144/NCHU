@@ -112,6 +112,7 @@ export function listReservations(tripId: string | number) {
   for (const r of reservations) {
     r.day_positions = posMap.get(r.id) || null;
     r.endpoints = endpointsMap.get(r.id) || [];
+    r.properties = r.properties ? (typeof r.properties === 'string' ? JSON.parse(r.properties) : r.properties) : undefined;
   }
 
   return reservations;
@@ -131,6 +132,7 @@ export function getReservationWithJoins(id: string | number) {
   `).get(id) as any;
   if (!row) return undefined;
   row.endpoints = loadEndpoints(row.id);
+  row.properties = row.properties ? (typeof row.properties === 'string' ? JSON.parse(row.properties) : row.properties) : undefined;
   return row;
 }
 
@@ -161,6 +163,7 @@ interface CreateReservationData {
   create_accommodation?: CreateAccommodation;
   endpoints?: EndpointInput[];
   needs_review?: boolean;
+  properties?: Record<string, any>;
 }
 
 export function createReservation(tripId: string | number, data: CreateReservationData): { reservation: any; accommodationCreated: boolean } {
@@ -168,7 +171,7 @@ export function createReservation(tripId: string | number, data: CreateReservati
     title, reservation_time, reservation_end_time, location,
     confirmation_number, notes, day_id, end_day_id, place_id, assignment_id,
     status, type, accommodation_id, metadata, create_accommodation,
-    endpoints, needs_review
+    endpoints, needs_review, properties
   } = data;
 
   let accommodationCreated = false;
@@ -200,8 +203,8 @@ export function createReservation(tripId: string | number, data: CreateReservati
   }
 
   const result = db.prepare(`
-    INSERT INTO reservations (trip_id, day_id, end_day_id, place_id, assignment_id, title, reservation_time, reservation_end_time, location, confirmation_number, notes, status, type, accommodation_id, metadata, needs_review)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO reservations (trip_id, day_id, end_day_id, place_id, assignment_id, title, reservation_time, reservation_end_time, location, confirmation_number, notes, status, type, accommodation_id, metadata, needs_review, properties)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     tripId,
     resolvedDayId,
@@ -218,7 +221,8 @@ export function createReservation(tripId: string | number, data: CreateReservati
     resolvedType,
     resolvedAccommodationId,
     metadata ? JSON.stringify(metadata) : null,
-    needs_review ? 1 : 0
+    needs_review ? 1 : 0,
+    properties ? JSON.stringify(properties) : '{}'
   );
 
   if (endpoints && endpoints.length > 0) {
@@ -274,7 +278,11 @@ export function getDayPositions(tripId: string | number, dayId: number | string)
 }
 
 export function getReservation(id: string | number, tripId: string | number) {
-  return db.prepare('SELECT * FROM reservations WHERE id = ? AND trip_id = ?').get(id, tripId) as Reservation | undefined;
+  const row = db.prepare('SELECT * FROM reservations WHERE id = ? AND trip_id = ?').get(id, tripId) as any;
+  if (row && row.properties) {
+    row.properties = typeof row.properties === 'string' ? JSON.parse(row.properties) : row.properties;
+  }
+  return row;
 }
 
 interface UpdateReservationData {
@@ -295,6 +303,7 @@ interface UpdateReservationData {
   create_accommodation?: CreateAccommodation;
   endpoints?: EndpointInput[];
   needs_review?: boolean;
+  properties?: Record<string, any>;
 }
 
 export function updateReservation(id: string | number, tripId: string | number, data: UpdateReservationData, current: Reservation): { reservation: any; accommodationChanged: boolean } {
@@ -302,7 +311,7 @@ export function updateReservation(id: string | number, tripId: string | number, 
     title, reservation_time, reservation_end_time, location,
     confirmation_number, notes, day_id, end_day_id, place_id, assignment_id,
     status, type, accommodation_id, metadata, create_accommodation,
-    endpoints, needs_review
+    endpoints, needs_review, properties
   } = data;
 
   let accommodationChanged = false;
@@ -374,7 +383,8 @@ export function updateReservation(id: string | number, tripId: string | number, 
       type = COALESCE(?, type),
       accommodation_id = ?,
       metadata = ?,
-      needs_review = COALESCE(?, needs_review)
+      needs_review = COALESCE(?, needs_review),
+      properties = CASE WHEN ? THEN ? ELSE properties END
     WHERE id = ?
   `).run(
     title || null,
@@ -392,6 +402,8 @@ export function updateReservation(id: string | number, tripId: string | number, 
     resolvedAccId,
     metadata !== undefined ? (metadata ? JSON.stringify(metadata) : null) : current.metadata,
     needs_review === undefined ? null : (needs_review ? 1 : 0),
+    properties !== undefined ? 1 : 0,
+    properties !== undefined ? (properties ? JSON.stringify(properties) : '{}') : null,
     id
   );
 

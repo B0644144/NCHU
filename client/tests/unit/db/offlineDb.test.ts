@@ -55,7 +55,7 @@ const makeDay = (id: number, tripId = 1): Day => ({
   notes_items: [],
 });
 
-const makePlace = (id: number, tripId = 1): Place => ({
+const makePlace = (id: number, tripId = 1) => ({
   id,
   trip_id: tripId,
   name: `Place ${id}`,
@@ -78,8 +78,8 @@ const makePlace = (id: number, tripId = 1): Place => ({
   transport_mode: null,
   website: null,
   phone: null,
-  created_at: '2026-01-01T00:00:00Z',
-});
+  created_at: '2026-07-01T12:00:00Z',
+} as any);
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 

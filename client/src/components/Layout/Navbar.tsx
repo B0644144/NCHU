@@ -5,7 +5,7 @@ import { useAuthStore } from '../../store/authStore'
 import { useSettingsStore } from '../../store/settingsStore'
 import { useAddonStore } from '../../store/addonStore'
 import { useTranslation } from '../../i18n'
-import { Plane, LogOut, Settings, ChevronDown, Shield, ArrowLeft, Users, Moon, Sun, Monitor, CalendarDays, Briefcase, Globe, Compass } from 'lucide-react'
+import { Plane, LogOut, Settings, ChevronDown, Shield, ArrowLeft, Users, Moon, Sun, Monitor, CalendarDays, Briefcase, Globe, Compass, WifiOff, Cloud, Mountain } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import InAppNotificationBell from './InAppNotificationBell.tsx'
 
@@ -35,8 +35,21 @@ export default function Navbar({ tripTitle, tripId, onBack, showBack, onShare }:
   const location = useLocation()
   const [userMenuOpen, setUserMenuOpen] = useState<boolean>(false)
   const [scrolled, setScrolled] = useState<boolean>(false)
+  const [themeMenuOpen, setThemeMenuOpen] = useState<boolean>(false)
   const darkMode = settings.dark_mode
   const dark = darkMode === true || darkMode === 'dark' || (darkMode === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+
+  const [isOffline, setIsOffline] = useState(!navigator.onLine)
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false)
+    const handleOffline = () => setIsOffline(true)
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8 || (document.body.scrollTop || 0) > 8)
@@ -50,7 +63,7 @@ export default function Navbar({ tripTitle, tripId, onBack, showBack, onShare }:
   }, [])
 
   // Only show 'global' type addons in the navbar — 'integration' addons have no dedicated page
-  const globalAddons = allAddons.filter((a: Addon) => a.type === 'global' && a.enabled)
+  const globalAddons = allAddons.filter((a: any) => a.type === 'global' && a.enabled)
 
   useEffect(() => {
     if (user) loadAddons()
@@ -73,9 +86,10 @@ export default function Navbar({ tripTitle, tripId, onBack, showBack, onShare }:
     }
   }, [])
 
-  const toggleDarkMode = () => {
+  const setTheme = (mode: 'light' | 'dark' | 'auto') => {
     document.documentElement.classList.add('trek-theme-transitioning')
-    updateSetting('dark_mode', dark ? 'light' : 'dark').catch(() => {})
+    updateSetting('dark_mode', mode).catch(() => {})
+    setThemeMenuOpen(false)
     if (themeTransitionTimer.current !== null) window.clearTimeout(themeTransitionTimer.current)
     themeTransitionTimer.current = window.setTimeout(() => {
       document.documentElement.classList.remove('trek-theme-transitioning')
@@ -138,6 +152,17 @@ export default function Navbar({ tripTitle, tripId, onBack, showBack, onShare }:
               <Briefcase className="w-3.5 h-3.5" />
               <span className="hidden md:inline">{t('nav.myTrips')}</span>
             </Link>
+            <Link to="/ski"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors flex-shrink-0"
+              style={{
+                color: location.pathname === '/ski' ? 'var(--text-primary)' : 'var(--text-muted)',
+                background: location.pathname === '/ski' ? 'var(--bg-hover)' : 'transparent',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+              onMouseLeave={e => { if (location.pathname !== '/ski') e.currentTarget.style.background = 'transparent' }}>
+              <Mountain className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">Ski Hub</span>
+            </Link>
             {globalAddons.map(addon => {
               const Icon = ADDON_ICONS[addon.icon] || CalendarDays
               const path = `/${addon.id}`
@@ -172,6 +197,18 @@ export default function Navbar({ tripTitle, tripId, onBack, showBack, onShare }:
       {/* Spacer */}
       <div className="flex-1" />
 
+      {/* Sync Status Badge */}
+      {isOffline && (
+        <div 
+          className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold flex-shrink-0"
+          style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}
+          title={t('common.offlineMode') || 'Offline Mode'}
+        >
+          <WifiOff className="w-3 h-3" />
+          {t('common.offline') || 'Offline'}
+        </div>
+      )}
+
       {/* Share button */}
       {onShare && (
         <button onClick={onShare}
@@ -195,17 +232,41 @@ export default function Navbar({ tripTitle, tripId, onBack, showBack, onShare }:
         </span>
       )}
 
-      {/* Dark mode toggle (light ↔ dark, overrides auto) — hidden on mobile */}
-      <button onClick={toggleDarkMode} title={dark ? t('nav.lightMode') : t('nav.darkMode')}
-        className="p-2 rounded-lg transition-colors flex-shrink-0 hidden sm:flex relative w-8 h-8 items-center justify-center"
-        style={{ color: 'var(--text-muted)' }}
-        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-        <Sun className="w-4 h-4 absolute transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
-          style={{ opacity: dark ? 1 : 0, transform: dark ? 'rotate(0deg) scale(1)' : 'rotate(-90deg) scale(0.6)' }} />
-        <Moon className="w-4 h-4 absolute transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
-          style={{ opacity: dark ? 0 : 1, transform: dark ? 'rotate(90deg) scale(0.6)' : 'rotate(0deg) scale(1)' }} />
-      </button>
+      {/* Theme toggle dropdown — hidden on mobile */}
+      <div className="relative hidden sm:block">
+        <button onClick={() => setThemeMenuOpen(!themeMenuOpen)} title={t('settings.colorMode')}
+          className="p-2 rounded-lg transition-colors flex relative w-8 h-8 items-center justify-center"
+          style={{ color: 'var(--text-muted)' }}
+          onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+          {darkMode === 'auto' ? <Monitor className="w-4 h-4" /> : dark ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+        </button>
+
+        {themeMenuOpen && ReactDOM.createPortal(
+          <>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 9998 }} onClick={() => setThemeMenuOpen(false)} />
+            <div className="trek-menu-enter w-36 rounded-xl shadow-xl border overflow-hidden py-1" style={{ position: 'fixed', top: 'var(--nav-h)', right: 60, zIndex: 9999, background: 'var(--bg-card)', borderColor: 'var(--border-primary)' }}>
+              {[
+                { value: 'light', label: t('settings.light') || 'Light', icon: Sun },
+                { value: 'dark', label: t('settings.dark') || 'Dark', icon: Moon },
+                { value: 'auto', label: t('settings.auto') || 'System', icon: Monitor },
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setTheme(opt.value as 'light'|'dark'|'auto')}
+                  className="flex items-center gap-2 w-full px-4 py-2 text-sm transition-colors"
+                  style={{ color: darkMode === opt.value ? 'var(--text-primary)' : 'var(--text-secondary)', background: darkMode === opt.value ? 'var(--bg-hover)' : 'transparent', fontWeight: darkMode === opt.value ? 600 : 500 }}
+                  onMouseEnter={e => { if (darkMode !== opt.value) e.currentTarget.style.background = 'var(--bg-hover)' }}
+                  onMouseLeave={e => { if (darkMode !== opt.value) e.currentTarget.style.background = 'transparent' }}
+                >
+                  <opt.icon className="w-4 h-4" /> {opt.label}
+                </button>
+              ))}
+            </div>
+          </>,
+          document.body
+        )}
+      </div>
 
       {/* Notification bell — only in trip view on mobile, everywhere on desktop */}
       {user && tripId && <InAppNotificationBell />}

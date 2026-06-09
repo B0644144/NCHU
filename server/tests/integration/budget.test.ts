@@ -138,6 +138,91 @@ describe('List budget items', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// List budget items with filtering
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('List budget items with filtering', () => {
+  it('BUDGET-020 — filters by search query q', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    createBudgetItem(testDb, trip.id, { name: 'Plane Ticket', total_price: 300, note: 'Flight to Tokyo' });
+    createBudgetItem(testDb, trip.id, { name: 'Hotel stay', total_price: 500, note: 'Tokyo hotel' });
+    createBudgetItem(testDb, trip.id, { name: 'Lunch', total_price: 20, note: 'Ramen' });
+
+    // Match 'Tokyo' in name or note
+    const res = await request(app)
+      .get(`/api/trips/${trip.id}/budget?q=Tokyo`)
+      .set('Cookie', authCookie(user.id));
+    expect(res.status).toBe(200);
+    expect(res.body.items).toHaveLength(2);
+    expect(res.body.items.some((i: any) => i.name === 'Plane Ticket')).toBe(true);
+    expect(res.body.items.some((i: any) => i.name === 'Hotel stay')).toBe(true);
+
+    // Match 'Plane'
+    const res2 = await request(app)
+      .get(`/api/trips/${trip.id}/budget?q=Plane`)
+      .set('Cookie', authCookie(user.id));
+    expect(res2.status).toBe(200);
+    expect(res2.body.items).toHaveLength(1);
+    expect(res2.body.items[0].name).toBe('Plane Ticket');
+  });
+
+  it('BUDGET-021 — filters by category', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    createBudgetItem(testDb, trip.id, { name: 'Plane', category: 'Transport', total_price: 300 });
+    createBudgetItem(testDb, trip.id, { name: 'Hotel', category: 'Lodging', total_price: 500 });
+
+    const res = await request(app)
+      .get(`/api/trips/${trip.id}/budget?category=Transport`)
+      .set('Cookie', authCookie(user.id));
+    expect(res.status).toBe(200);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0].name).toBe('Plane');
+  });
+
+  it('BUDGET-022 — filters by user_id member', async () => {
+    const { user: owner } = createUser(testDb);
+    const { user: member1 } = createUser(testDb);
+    const { user: member2 } = createUser(testDb);
+    const trip = createTrip(testDb, owner.id);
+    addTripMember(testDb, trip.id, member1.id);
+    addTripMember(testDb, trip.id, member2.id);
+
+    const item1 = createBudgetItem(testDb, trip.id, { name: 'Dinner', total_price: 60 });
+    const item2 = createBudgetItem(testDb, trip.id, { name: 'Train', total_price: 40 });
+
+    // assign member1 to item1
+    await request(app)
+      .put(`/api/trips/${trip.id}/budget/${item1.id}/members`)
+      .set('Cookie', authCookie(owner.id))
+      .send({ user_ids: [member1.id] });
+
+    // assign member2 to item2
+    await request(app)
+      .put(`/api/trips/${trip.id}/budget/${item2.id}/members`)
+      .set('Cookie', authCookie(owner.id))
+      .send({ user_ids: [member2.id] });
+
+    // Filter by member1
+    const res = await request(app)
+      .get(`/api/trips/${trip.id}/budget?user_id=${member1.id}`)
+      .set('Cookie', authCookie(owner.id));
+    expect(res.status).toBe(200);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0].name).toBe('Dinner');
+
+    // Filter by member2 using persons parameter
+    const res2 = await request(app)
+      .get(`/api/trips/${trip.id}/budget?persons=${member2.id}`)
+      .set('Cookie', authCookie(owner.id));
+    expect(res2.status).toBe(200);
+    expect(res2.body.items).toHaveLength(1);
+    expect(res2.body.items[0].name).toBe('Train');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Update budget item
 // ─────────────────────────────────────────────────────────────────────────────
 

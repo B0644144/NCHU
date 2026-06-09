@@ -416,4 +416,85 @@ describe('TodoListPanel', () => {
     render(<TodoListPanel tripId={1} items={items} />);
     expect(screen.getByText('This is a task description')).toBeInTheDocument();
   });
+
+  it('FE-COMP-TODO-030: priority dropdown filters task list', async () => {
+    const user = userEvent.setup();
+    const items = [
+      buildTodoItem({ name: 'P1 Task', priority: 1, checked: 0 }),
+      buildTodoItem({ name: 'P3 Task', priority: 3, checked: 0 }),
+    ];
+    render(<TodoListPanel tripId={1} items={items} />);
+
+    // Find the Priority Filter trigger button (initially showing "All Priorities")
+    const trigger = screen.getByRole('button', { name: /All Priorities/i });
+    await user.click(trigger);
+
+    // Select "P1 (High)" option
+    const option = await screen.findByRole('button', { name: /P1 \(High\)/i });
+    await user.click(option);
+
+    // Verify that "P1 Task" is visible and "P3 Task" is hidden
+    expect(screen.getByText('P1 Task')).toBeInTheDocument();
+    expect(screen.queryByText('P3 Task')).not.toBeInTheDocument();
+  });
+
+  it('FE-COMP-TODO-031: assignee dropdown filters task list', async () => {
+    const user = userEvent.setup();
+    const items = [
+      buildTodoItem({ name: 'Assigned to Me', assigned_user_id: 1, checked: 0 }),
+      buildTodoItem({ name: 'Unassigned Task', assigned_user_id: null, checked: 0 }),
+    ];
+    render(<TodoListPanel tripId={1} items={items} />);
+
+    // Trigger assignee dropdown (initially "All Assignees")
+    const trigger = screen.getByRole('button', { name: /All Assignees/i });
+    await user.click(trigger);
+
+    // Select "Unassigned" option
+    const option = await screen.findByRole('button', { name: /Unassigned/i });
+    await user.click(option);
+
+    expect(screen.getByText('Unassigned Task')).toBeInTheDocument();
+    expect(screen.queryByText('Assigned to Me')).not.toBeInTheDocument();
+  });
+
+  it('FE-COMP-TODO-032: category dropdown filters task list', async () => {
+    const user = userEvent.setup();
+    const items = [
+      buildTodoItem({ name: 'Food Task', category: 'Food', checked: 0 }),
+      buildTodoItem({ name: 'Gear Task', category: 'Gear', checked: 0 }),
+    ];
+    render(<TodoListPanel tripId={1} items={items} />);
+
+    // Trigger category dropdown (initially "All Categories")
+    const trigger = screen.getByRole('button', { name: /All Categories/i });
+    await user.click(trigger);
+
+    // Select "Food" option
+    const option = await screen.findByRole('button', { name: /^Food$/ });
+    await user.click(option);
+
+    expect(screen.getByText('Food Task')).toBeInTheDocument();
+    expect(screen.queryByText('Gear Task')).not.toBeInTheDocument();
+  });
+
+  it('FE-COMP-TODO-033: sort dropdown reorders task list', async () => {
+    const user = userEvent.setup();
+    const items = [
+      buildTodoItem({ name: 'Low Prio', priority: 3, checked: 0 }),
+      buildTodoItem({ name: 'High Prio', priority: 1, checked: 0 }),
+    ];
+    render(<TodoListPanel tripId={1} items={items} />);
+
+    // Trigger sort dropdown (initially "No Sort")
+    const trigger = screen.getByRole('button', { name: /No Sort/i });
+    await user.click(trigger);
+
+    // Select "Priority (High to Low)" which is priority-asc
+    const option = await screen.findByRole('button', { name: /Priority \(High to Low\)/i });
+    await user.click(option);
+
+    const html = document.body.innerHTML;
+    expect(html.indexOf('High Prio')).toBeLessThan(html.indexOf('Low Prio'));
+  });
 });

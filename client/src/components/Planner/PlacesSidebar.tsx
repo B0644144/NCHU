@@ -1,7 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
 import { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
-import { Search, Plus, X, CalendarDays, Pencil, Trash2, ExternalLink, Navigation, Upload, ChevronDown, Check, MapPin, Eye, Route } from 'lucide-react'
+import { Search, Plus, X, CalendarDays, Pencil, Trash2, ExternalLink, Navigation, Upload, ChevronDown, Check, MapPin, Eye, Route, Snowflake } from 'lucide-react'
 import PlaceAvatar from '../shared/PlaceAvatar'
 import { getCategoryIcon } from '../shared/categoryIcons'
 import { useTranslation } from '../../i18n'
@@ -15,6 +15,7 @@ import FileImportModal from './FileImportModal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Tooltip from '../shared/Tooltip'
 import ExplainableAssistant from '../AI/ExplainableAssistant'
+import SkiRouteGenerator from '../AI/SkiRouteGenerator'
 
 interface PlacesSidebarProps {
   tripId: number
@@ -23,10 +24,10 @@ interface PlacesSidebarProps {
   assignments: AssignmentsMap
   selectedDayId: number | null
   selectedPlaceId: number | null
-  onPlaceClick: (placeId: number | null) => void
+  onPlaceClick: (placeId: number | null, assignmentId?: number | null) => void
   onAddPlace: (prefillData?: Partial<Place>) => void
-  onAssignToDay: (placeId: number, dayId: number) => void
-  onEditPlace: (place: Place) => void
+  onAssignToDay: (placeId: number, dayId: number, position?: number) => void
+  onEditPlace: (place: Place, assignmentId?: number | null) => void
   onDeletePlace: (placeId: number) => void
   onBulkDeletePlaces?: (ids: number[]) => void
   onBulkDeleteConfirm?: (ids: number[]) => void
@@ -51,27 +52,28 @@ interface MemoPlaceRowProps {
   canEditPlaces: boolean
   isMobile: boolean
   t: (key: string, params?: Record<string, any>) => string
-  onPlaceClick: (id: number | null) => void
+  onPlaceClick: (id: number | null, assignmentId?: number | null) => void
   onContextMenu: (e: React.MouseEvent, place: Place) => void
-  onAssignToDay: (placeId: number, dayId?: number) => void
+  onAssignToDay: (placeId: number, dayId?: number, position?: number) => void
   toggleSelected: (id: number) => void
   setDayPickerPlace: (place: any) => void
 }
 
 const MemoPlaceRow = React.memo(function MemoPlaceRow({
   place, category: cat, isSelected, isPlanned, inDay, isChecked,
-  selectMode, selectedDayId, canEditPlaces, isMobile, t,
+  selectMode, selectedIds, selectedDayId, canEditPlaces, isMobile, t,
   onPlaceClick, onContextMenu, onAssignToDay, toggleSelected, setDayPickerPlace,
-}: MemoPlaceRowProps) {
+}: MemoPlaceRowProps & { selectedIds?: Set<number> }) {
   const hasGeometry = Boolean(place.route_geometry)
   return (
     <div
       key={place.id}
-      draggable={!selectMode}
+      draggable={!selectMode || isChecked}
       onDragStart={e => {
-        e.dataTransfer.setData('placeId', String(place.id))
+        const ids = (selectMode && isChecked) ? Array.from(selectedIds) : [place.id]
+        e.dataTransfer.setData('placeIds', JSON.stringify(ids))
         e.dataTransfer.effectAllowed = 'copy'
-        window.__dragData = { placeId: String(place.id) }
+        window.__dragData = { placeIds: ids }
       }}
       onClick={() => {
         if (selectMode) {
@@ -109,10 +111,10 @@ const MemoPlaceRow = React.memo(function MemoPlaceRow({
       <PlaceAvatar place={place} category={cat} size={34} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden' }}>
-          {hasGeometry && <Route size={11} strokeWidth={2} color="var(--text-faint)" style={{ flexShrink: 0 }} title="Track / Route" />}
+          {hasGeometry && <span title="Track / Route"><Route size={11} strokeWidth={2} color="var(--text-faint)" style={{ flexShrink: 0 }} /></span>}
           {cat && (() => {
             const CatIcon = getCategoryIcon(cat.icon)
-            return <CatIcon size={11} strokeWidth={2} color={cat.color || '#6366f1'} style={{ flexShrink: 0 }} title={cat.name} />
+            return <span title={cat.name}><CatIcon size={11} strokeWidth={2} color={cat.color || '#6366f1'} style={{ flexShrink: 0 }} /></span>
           })()}
           <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>
             {place.name}
@@ -160,6 +162,7 @@ const PlacesSidebar = React.memo(function PlacesSidebar({
   const isNaverListImportEnabled = true
 
   const [fileImportOpen, setFileImportOpen] = useState(false)
+  const [skiRouteOpen, setSkiRouteOpen] = useState(false)
   const [sidebarDropFile, setSidebarDropFile] = useState<File | null>(null)
   const [sidebarDragOver, setSidebarDragOver] = useState(false)
   const sidebarDragCounter = useRef(0)
@@ -347,7 +350,7 @@ const PlacesSidebar = React.memo(function PlacesSidebar({
       {/* Kopfbereich */}
       <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--border-faint)', flexShrink: 0 }}>
         {canEditPlaces && <button
-          onClick={onAddPlace}
+          onClick={() => onAddPlace()}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
             width: '100%', padding: '8px 12px', borderRadius: 12, border: 'none',
@@ -382,6 +385,18 @@ const PlacesSidebar = React.memo(function PlacesSidebar({
             }}
           >
             <MapPin size={11} strokeWidth={2} /> {t(hasMultipleListImportProviders ? 'places.importList' : 'places.importGoogleList')}
+          </button>
+          <button
+            onClick={() => setSkiRouteOpen(true)}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+              flex: 1, padding: '5px 12px', borderRadius: 8,
+              border: '1px dashed var(--border-primary)', background: 'none',
+              color: 'var(--text-faint)', fontSize: 11, fontWeight: 500,
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            <Snowflake size={11} strokeWidth={2} /> {t('places.aiSkiRoute') || 'AI Ski Route'}
           </button>
         </div>
         <div style={{ height: 1, background: 'var(--border-primary)', margin: '2px 0 10px' }} />
@@ -668,7 +683,7 @@ const PlacesSidebar = React.memo(function PlacesSidebar({
             <span style={{ fontSize: 13, color: 'var(--text-faint)' }}>
               {filter === 'unplanned' ? t('places.allPlanned') : t('places.noneFound')}
             </span>
-            {canEditPlaces && <button onClick={onAddPlace} style={{ fontSize: 12, color: 'var(--text-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', fontFamily: 'inherit' }}>
+            {canEditPlaces && <button onClick={() => onAddPlace()} style={{ fontSize: 12, color: 'var(--text-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', fontFamily: 'inherit' }}>
               {t('places.addPlace')}
             </button>}
           </div>
@@ -689,6 +704,7 @@ const PlacesSidebar = React.memo(function PlacesSidebar({
                 inDay={inDay}
                 isChecked={isChecked}
                 selectMode={selectMode}
+                selectedIds={selectedIds}
                 selectedDayId={selectedDayId}
                 canEditPlaces={canEditPlaces}
                 isMobile={isMobile}
@@ -860,6 +876,11 @@ const PlacesSidebar = React.memo(function PlacesSidebar({
         tripId={tripId}
         pushUndo={pushUndo}
         initialFile={sidebarDropFile}
+      />
+      <SkiRouteGenerator
+        tripId={tripId}
+        isOpen={skiRouteOpen}
+        onClose={() => setSkiRouteOpen(false)}
       />
       <ContextMenu menu={ctxMenu.menu} onClose={ctxMenu.close} />
       {isMobile && (

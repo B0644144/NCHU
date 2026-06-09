@@ -9,7 +9,7 @@ type SetState = StoreApi<TripStoreState>['setState']
 type GetState = StoreApi<TripStoreState>['getState']
 
 export interface BudgetSlice {
-  loadBudgetItems: (tripId: number | string) => Promise<void>
+  loadBudgetItems: (tripId: number | string, filters?: Record<string, any>) => Promise<void>
   addBudgetItem: (tripId: number | string, data: Partial<BudgetItem>) => Promise<BudgetItem>
   updateBudgetItem: (tripId: number | string, id: number, data: Partial<BudgetItem>) => Promise<BudgetItem>
   deleteBudgetItem: (tripId: number | string, id: number) => Promise<void>
@@ -20,9 +20,9 @@ export interface BudgetSlice {
 }
 
 export const createBudgetSlice = (set: SetState, get: GetState): BudgetSlice => ({
-  loadBudgetItems: async (tripId) => {
+  loadBudgetItems: async (tripId, filters) => {
     try {
-      const data = await budgetRepo.list(tripId)
+      const data = await budgetRepo.list(tripId, filters)
       set({ budgetItems: data.items })
     } catch (err: unknown) {
       console.error('Failed to load budget items:', err)
@@ -93,7 +93,7 @@ export const createBudgetSlice = (set: SetState, get: GetState): BudgetSlice => 
       const reordered = orderedIds.map((id, idx) => {
         const item = byId.get(id)
         return item ? { ...item, sort_order: idx } : null
-      }).filter((i): i is BudgetItem => i !== null)
+      }).filter(i => i !== null) as BudgetItem[]
       // Keep items not in orderedIds at the end
       const remaining = state.budgetItems.filter(i => !orderedIds.includes(i.id))
       return { budgetItems: [...reordered, ...remaining] }

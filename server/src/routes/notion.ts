@@ -77,7 +77,7 @@ router.post('/sync/:tripId', authenticate, async (req, res) => {
 
     const result = await notionService.exportTrip(Number(tripId));
     if (result.success) {
-      res.json({ success: true, message: \`Successfully synced \${result.syncedCount} places to Notion.\` });
+      res.json({ success: true, message: `Successfully synced ${result.syncedCount} places to Notion.` });
     } else {
       res.status(500).json({ error: result.error });
     }

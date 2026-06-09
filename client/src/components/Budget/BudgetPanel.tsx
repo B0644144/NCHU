@@ -1,10 +1,11 @@
 import ReactDOM from 'react-dom'
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback, Fragment } from 'react'
 import DOM from 'react-dom'
 import { useTripStore } from '../../store/tripStore'
 import { useCanDo } from '../../store/permissionsStore'
 import { useTranslation } from '../../i18n'
-import { Plus, Trash2, Calculator, Wallet, Pencil, Users, Check, Info, ChevronDown, ChevronRight, Download, GripVertical, TrendingUp, TrendingDown, PieChart as PieChartIcon } from 'lucide-react'
+import { Plus, Trash2, Calculator, Wallet, Pencil, Users, Check, Info, ChevronDown, ChevronRight, Download, GripVertical, TrendingUp, TrendingDown, PieChart as PieChartIcon, BarChart3, Search, X, SlidersHorizontal } from 'lucide-react'
+import PropertiesEditor from '../shared/PropertiesEditor'
 
 function useIsDark(): boolean {
   const [dark, setDark] = useState<boolean>(() => typeof document !== 'undefined' && document.documentElement.classList.contains('dark'))
@@ -123,7 +124,7 @@ const calcPD = (p, d) => (d > 0 ? p / d : null)
 const calcPPD = (p, n, d) => (n > 0 && d > 0 ? p / (n * d) : null)
 
 // ── Inline Edit Cell ─────────────────────────────────────────────────────────
-function InlineEditCell({ value, onSave, type = 'text', style = {}, placeholder = '', decimals = 2, locale, editTooltip, readOnly = false }) {
+function InlineEditCell({ value, onSave, type = 'text', style = {} as React.CSSProperties, placeholder = '', decimals = 2, locale, editTooltip, readOnly = false }: any) {
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState(value ?? '')
   const inputRef = useRef(null)
@@ -183,13 +184,15 @@ function InlineEditCell({ value, onSave, type = 'text', style = {}, placeholder 
 
 // ── Add Item Row ─────────────────────────────────────────────────────────────
 interface AddItemRowProps {
-  onAdd: (data: { name: string; total_price: number; persons: number | null; days: number | null; note: string | null; expense_date: string | null }) => void
+  tripCurrency: string
+  onAdd: (data: { name: string; total_price: number; currency?: string; original_amount?: number; exchange_rate?: number; persons: number | null; days: number | null; note: string | null; expense_date: string | null }) => void
   t: (key: string) => string
 }
 
-function AddItemRow({ onAdd, t }: AddItemRowProps) {
+function AddItemRow({ onAdd, t, tripCurrency }: AddItemRowProps) {
   const [name, setName] = useState('')
   const [price, setPrice] = useState('')
+  const [itemCurrency, setItemCurrency] = useState(tripCurrency)
   const [persons, setPersons] = useState('')
   const [days, setDays] = useState('')
   const [note, setNote] = useState('')
@@ -198,8 +201,10 @@ function AddItemRow({ onAdd, t }: AddItemRowProps) {
 
   const handleAdd = () => {
     if (!name.trim()) return
-    onAdd({ name: name.trim(), total_price: parseFloat(String(price).replace(',', '.')) || 0, persons: parseInt(persons) || null, days: parseInt(days) || null, note: note.trim() || null, expense_date: expenseDate || null })
-    setName(''); setPrice(''); setPersons(''); setDays(''); setNote(''); setExpenseDate('')
+    const amount = parseFloat(String(price).replace(',', '.')) || 0;
+    // We send original_amount and currency, handleAddItem will calculate total_price and exchange_rate
+    onAdd({ name: name.trim(), total_price: amount, original_amount: amount, currency: itemCurrency, persons: parseInt(persons) || null, days: parseInt(days) || null, note: note.trim() || null, expense_date: expenseDate || null })
+    setName(''); setPrice(''); setPersons(''); setDays(''); setNote(''); setExpenseDate(''); setItemCurrency(tripCurrency)
     setTimeout(() => nameRef.current?.focus(), 50)
   }
 
@@ -212,9 +217,14 @@ function AddItemRow({ onAdd, t }: AddItemRowProps) {
           placeholder={t('budget.newEntry')} style={inp} />
       </td>
       <td style={{ padding: '4px 6px' }}>
-        <input value={price} onChange={e => setPrice(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAdd()}
-          onPaste={e => { e.preventDefault(); let t = e.clipboardData.getData('text').trim().replace(/[^\d.,-]/g, ''); const lc = t.lastIndexOf(','), ld = t.lastIndexOf('.'), dp = Math.max(lc, ld); if (dp > -1) { t = t.substring(0, dp).replace(/[.,]/g, '') + '.' + t.substring(dp + 1) } else { t = t.replace(/[.,]/g, '') } setPrice(t) }}
-          placeholder="0,00" inputMode="decimal" style={{ ...inp, textAlign: 'center' }} />
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <input value={price} onChange={e => setPrice(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAdd()}
+            onPaste={e => { e.preventDefault(); let t = e.clipboardData.getData('text').trim().replace(/[^\d.,-]/g, ''); const lc = t.lastIndexOf(','), ld = t.lastIndexOf('.'), dp = Math.max(lc, ld); if (dp > -1) { t = t.substring(0, dp).replace(/[.,]/g, '') + '.' + t.substring(dp + 1) } else { t = t.replace(/[.,]/g, '') } setPrice(t) }}
+            placeholder="0,00" inputMode="decimal" style={{ ...inp, textAlign: 'center', minWidth: 60 }} />
+          <select value={itemCurrency} onChange={e => setItemCurrency(e.target.value)} style={{ ...inp, width: 65, padding: '4px', appearance: 'none', textAlign: 'center' }}>
+            {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
       </td>
       <td className="hidden sm:table-cell" style={{ padding: '4px 6px', textAlign: 'center' }}>
         <input value={persons} onChange={e => setPersons(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAdd()}
@@ -573,6 +583,7 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
 
   const fmt = (v, cur) => fmtNum(v, locale, cur)
   const hasMultipleMembers = tripMembers.length > 1
+  const [expandedProps, setExpandedProps] = useState<Record<number, boolean>>({})
 
   // Drag state for categories
   const [dragCat, setDragCat] = useState<string | null>(null)
@@ -594,15 +605,48 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
 
   useEffect(() => { if (tripId) loadBudgetItems(tripId) }, [tripId])
 
-  const grouped = useMemo(() => {
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
+
+  const allCategoryNames = useMemo(() => {
     const map = new Map<string, BudgetItem[]>()
     for (const item of (budgetItems || [])) {
       const cat = item.category || 'Other'
       if (!map.has(cat)) map.set(cat, [])
       map.get(cat)!.push(item)
     }
-    return map
+    return Array.from(map.keys())
   }, [budgetItems])
+
+  const filteredItems = useMemo(() => {
+    return (budgetItems || []).filter(item => {
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase()
+        const nameMatch = item.name && item.name.toLowerCase().includes(q)
+        const noteMatch = item.note && item.note.toLowerCase().includes(q)
+        if (!nameMatch && !noteMatch) return false
+      }
+      if (selectedCategory && item.category !== selectedCategory) {
+        return false
+      }
+      if (selectedUserId) {
+        const isMember = item.members && item.members.some(m => m.user_id === selectedUserId)
+        if (!isMember) return false
+      }
+      return true
+    })
+  }, [budgetItems, searchQuery, selectedCategory, selectedUserId])
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, BudgetItem[]>()
+    for (const item of filteredItems) {
+      const cat = item.category || 'Other'
+      if (!map.has(cat)) map.set(cat, [])
+      map.get(cat)!.push(item)
+    }
+    return map
+  }, [filteredItems])
 
   const categoryNames = Array.from(grouped.keys())
 
@@ -625,8 +669,43 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
     })).filter(s => s.value > 0)
   , [grouped, categoryNames])
 
-  const handleAddItem = async (category, data) => { try { await addBudgetItem(tripId, { ...data, category }) } catch {} }
+  const handleAddItem = async (category, data) => {
+    try {
+      let finalPrice = data.original_amount || 0;
+      let exRate = 1.0;
+      if (data.currency && data.currency !== currency) {
+        const { fetchExchangeRate } = await import('../../utils/currency')
+        exRate = await fetchExchangeRate(data.currency, currency)
+        finalPrice = (data.original_amount || 0) * exRate
+      }
+      await addBudgetItem(tripId, { ...data, category, total_price: finalPrice, exchange_rate: exRate })
+    } catch {}
+  }
+
   const handleUpdateField = async (id, field, value) => { try { await updateBudgetItem(tripId, id, { [field]: value }) } catch {} }
+  
+  const handleUpdateOriginalAmount = async (item, v) => {
+    try {
+      const amount = parseFloat(v)
+      if (isNaN(amount)) return
+      const exRate = item.exchange_rate || 1.0
+      await updateBudgetItem(tripId, item.id, { original_amount: amount, total_price: amount * exRate })
+    } catch {}
+  }
+  
+  const handleUpdateCurrency = async (item, newCurrency) => {
+    try {
+      if (newCurrency === item.currency) return
+      let exRate = 1.0
+      if (newCurrency !== currency) {
+        const { fetchExchangeRate } = await import('../../utils/currency')
+        exRate = await fetchExchangeRate(newCurrency, currency)
+      }
+      const amount = item.original_amount ?? item.total_price ?? 0
+      await updateBudgetItem(tripId, item.id, { currency: newCurrency, exchange_rate: exRate, total_price: amount * exRate })
+    } catch {}
+  }
+
   const handleDeleteItem = async (id) => { try { await deleteBudgetItem(tripId, id) } catch {} }
   const handleDeleteCategory = async (cat) => {
     const items = grouped.get(cat) || []
@@ -678,8 +757,8 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
     URL.revokeObjectURL(url)
   }
 
-  const th = { padding: '6px 8px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '2px solid var(--border-primary)', whiteSpace: 'nowrap', background: 'var(--bg-secondary)' }
-  const td = { padding: '2px 6px', borderBottom: '1px solid var(--border-secondary)', fontSize: 13, verticalAlign: 'middle', color: 'var(--text-primary)' }
+  const th: React.CSSProperties = { padding: '6px 8px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '2px solid var(--border-primary)', whiteSpace: 'nowrap', background: 'var(--bg-secondary)' }
+  const td: React.CSSProperties = { padding: '2px 6px', borderBottom: '1px solid var(--border-secondary)', fontSize: 13, verticalAlign: 'middle', color: 'var(--text-primary)' }
 
   // ── Empty State ──────────────────────────────────────────────────────────
   if (!budgetItems || budgetItems.length === 0) {
@@ -720,7 +799,48 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
             {t('budget.title')}
           </h2>
           <div className="flex flex-wrap max-md:!w-full max-md:!mt-2" style={{ alignItems: 'center', gap: 8, marginLeft: 'auto', flexShrink: 0 }}>
-            <div className="max-md:!w-full" style={{ width: 150 }}>
+            <div className="max-md:!w-full" style={{ position: 'relative', width: 180 }}>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder={t('budget.searchPlaceholder') || "Search expenses..."}
+                style={{
+                  width: '100%',
+                  border: '1px solid var(--border-primary)',
+                  borderRadius: 10,
+                  padding: '9px 14px 9px 32px',
+                  fontSize: 13,
+                  outline: 'none',
+                  fontFamily: 'inherit',
+                  background: 'var(--bg-card)',
+                  color: 'var(--text-primary)'
+                }}
+              />
+              <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-faint)', display: 'flex', alignItems: 'center' }}>
+                <Search size={14} strokeWidth={2.5} />
+              </span>
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  style={{
+                    position: 'absolute',
+                    right: 8,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: 'var(--text-faint)',
+                    padding: 4,
+                    display: 'flex'
+                  }}
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+            <div className="max-md:!w-full" style={{ width: 120 }}>
               <CustomSelect
                 value={currency}
                 onChange={setCurrency}
@@ -769,12 +889,160 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
         </div>
       </div>
 
+      {/* Filter Pills Bar */}
+      <div style={{ padding: '12px 28px 0', display: 'flex', flexDirection: 'column', gap: 10 }} className="max-md:!px-4">
+        {/* Category Filter Pills */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: 4 }}>
+            {t('budget.filters.categories') || 'Categories'}:
+          </span>
+          <button
+            onClick={() => setSelectedCategory(null)}
+            style={{
+              appearance: 'none',
+              border: selectedCategory === null ? '1.5px solid var(--accent)' : '1px solid var(--border-primary)',
+              background: selectedCategory === null ? 'var(--accent-faint, rgba(99,102,241,0.1))' : 'var(--bg-card)',
+              color: selectedCategory === null ? 'var(--accent)' : 'var(--text-secondary)',
+              borderRadius: 20,
+              padding: '4px 12px',
+              fontSize: 12,
+              fontWeight: 500,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            {t('budget.filters.all') || 'All'}
+          </button>
+          {allCategoryNames.map(cat => {
+            const isSelected = selectedCategory === cat
+            const color = categoryColor(cat)
+            return (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(isSelected ? null : cat)}
+                style={{
+                  appearance: 'none',
+                  border: isSelected ? `1.5px solid ${color}` : '1px solid var(--border-primary)',
+                  background: isSelected ? `${color}20` : 'var(--bg-card)',
+                  color: isSelected ? color : 'var(--text-secondary)',
+                  borderRadius: 20,
+                  padding: '4px 12px',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: color }} />
+                {cat}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Member Filter Pills */}
+        {hasMultipleMembers && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: 4 }}>
+              {t('budget.filters.members') || 'Members'}:
+            </span>
+            <button
+              onClick={() => setSelectedUserId(null)}
+              style={{
+                appearance: 'none',
+                border: selectedUserId === null ? '1.5px solid var(--accent)' : '1px solid var(--border-primary)',
+                background: selectedUserId === null ? 'var(--accent-faint, rgba(99,102,241,0.1))' : 'var(--bg-card)',
+                color: selectedUserId === null ? 'var(--accent)' : 'var(--text-secondary)',
+                borderRadius: 20,
+                padding: '4px 12px',
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              {t('budget.filters.all') || 'All'}
+            </button>
+            {tripMembers.map(tm => {
+              const isSelected = selectedUserId === tm.id
+              return (
+                <button
+                  key={tm.id}
+                  onClick={() => setSelectedUserId(isSelected ? null : tm.id)}
+                  style={{
+                    appearance: 'none',
+                    border: isSelected ? '1.5px solid var(--accent)' : '1px solid var(--border-primary)',
+                    background: isSelected ? 'var(--accent-faint, rgba(99,102,241,0.1))' : 'var(--bg-card)',
+                    color: isSelected ? 'var(--accent)' : 'var(--text-secondary)',
+                    borderRadius: 20,
+                    padding: '4px 10px 4px 6px',
+                    fontSize: 12,
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <div style={{
+                    width: 16, height: 16, borderRadius: '50%', background: 'var(--bg-tertiary)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700,
+                    color: 'var(--text-muted)', overflow: 'hidden'
+                  }}>
+                    {tm.avatar_url
+                      ? <img src={tm.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : tm.username?.[0]?.toUpperCase()
+                    }
+                  </div>
+                  {tm.username}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
       <div style={{ display: 'flex', gap: 20, padding: '24px 28px 40px', alignItems: 'flex-start', flexWrap: 'wrap' }} className="max-md:!px-4">
         <div style={{ flex: 1, minWidth: 0 }}>
-          {categoryNames.map((cat, ci) => {
-            const items = grouped.get(cat) || []
-            const subtotal = items.reduce((s, x) => s + (x.total_price || 0), 0)
-            const color = categoryColor(cat)
+          {categoryNames.length === 0 ? (
+            <div style={{ padding: '60px 24px', textAlign: 'center', border: '1px dashed var(--border-primary)', borderRadius: 16, background: 'var(--bg-secondary)', marginBottom: 20 }}>
+              <Calculator size={36} color="var(--text-faint)" style={{ margin: '0 auto 12px', opacity: 0.6 }} />
+              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
+                {t('budget.noMatching') || 'No matching expenses'}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
+                {t('budget.noMatchingDesc') || 'Try adjusting your search query or filters'}
+              </div>
+              <button
+                onClick={() => {
+                  setSearchQuery('')
+                  setSelectedCategory(null)
+                  setSelectedUserId(null)
+                }}
+                style={{
+                  appearance: 'none',
+                  border: 'none',
+                  background: 'var(--accent)',
+                  color: 'var(--accent-text)',
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: 'pointer'
+                }}
+              >
+                {t('budget.clearFilters') || 'Clear Filters'}
+              </button>
+            </div>
+          ) : (
+            categoryNames.map((cat, ci) => {
+              const items = grouped.get(cat) || []
+              const subtotal = items.reduce((s, x) => s + (x.total_price || 0), 0)
+              const color = categoryColor(cat)
 
             return (
               <div key={cat} data-drag-cat={cat} style={{
@@ -874,8 +1142,10 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
                         const pd = calcPD(item.total_price, item.days)
                         const ppd = calcPPD(item.total_price, item.persons, item.days)
                         const hasMembers = item.members?.length > 0
+                        const isExpanded = expandedProps[item.id] || (Object.keys(item.properties || {}).length > 0 && expandedProps[item.id] !== false)
                         return (
-                          <tr key={item.id}
+                          <Fragment key={item.id}>
+                          <tr
                             style={{
                               transition: 'background 0.1s, opacity 0.15s',
                               opacity: dragItem === item.id ? 0.4 : 1,
@@ -927,7 +1197,23 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
                               </div>
                             </td>
                             <td style={{ ...td, textAlign: 'center' }}>
-                              <InlineEditCell value={item.total_price} type="number" decimals={currencyDecimals(currency)} onSave={v => handleUpdateField(item.id, 'total_price', v)} style={{ textAlign: 'center' }} placeholder={currencyDecimals(currency) === 0 ? '0' : '0,00'} locale={locale} editTooltip={t('budget.editTooltip')} readOnly={!canEdit} />
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <InlineEditCell value={item.original_amount ?? item.total_price} type="number" decimals={currencyDecimals(item.currency || currency)} onSave={v => handleUpdateOriginalAmount(item, v)} style={{ textAlign: 'center', minWidth: 40 }} placeholder={currencyDecimals(item.currency || currency) === 0 ? '0' : '0,00'} locale={locale} editTooltip={t('budget.editTooltip')} readOnly={!canEdit} />
+                                  {canEdit ? (
+                                    <select value={item.currency || currency} onChange={e => handleUpdateCurrency(item, e.target.value)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', fontSize: 11, cursor: 'pointer', outline: 'none', padding: 0, appearance: 'none' }} title="Change Currency">
+                                      {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                  ) : (
+                                    <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>{item.currency || currency}</span>
+                                  )}
+                                </div>
+                                {item.currency && item.currency !== currency && (
+                                  <div style={{ fontSize: 10, color: 'var(--text-faint)' }}>
+                                    ≈ {fmt(item.total_price, currency)}
+                                  </div>
+                                )}
+                              </div>
                             </td>
                             <td className="hidden sm:table-cell" style={{ ...td, textAlign: 'center', position: 'relative' }}>
                               {hasMultipleMembers ? (
@@ -958,7 +1244,11 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
                               )}
                             </td>
                             <td className="hidden sm:table-cell" style={td}><InlineEditCell value={item.note} onSave={v => handleUpdateField(item.id, 'note', v)} placeholder={t('budget.table.note')} locale={locale} editTooltip={t('budget.editTooltip')} readOnly={!canEdit} /></td>
-                            <td style={{ ...td, textAlign: 'center' }}>
+                            <td style={{ ...td, textAlign: 'center', whiteSpace: 'nowrap' }}>
+                              <button onClick={() => setExpandedProps(p => ({ ...p, [item.id]: !isExpanded }))} title="Properties"
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: isExpanded ? 'var(--text-secondary)' : 'var(--text-faint)', borderRadius: 4, display: 'inline-flex', transition: 'color 0.15s' }}>
+                                <SlidersHorizontal size={14} />
+                              </button>
                               {canEdit && (
                               <button onClick={() => handleDeleteItem(item.id)} title={t('common.delete')}
                                 style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--text-faint)', borderRadius: 4, display: 'inline-flex', transition: 'color 0.15s' }}
@@ -968,15 +1258,28 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
                               )}
                             </td>
                           </tr>
+                          {isExpanded && (
+                            <tr>
+                              <td colSpan={10} style={{ padding: '8px 16px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-secondary)' }}>
+                                <PropertiesEditor
+                                  properties={item.properties || {}}
+                                  onChange={(newProps) => updateBudgetItem(tripId, item.id, { properties: newProps })}
+                                  readOnly={!canEdit}
+                                />
+                              </td>
+                            </tr>
+                          )}
+                          </Fragment>
                         )
                       })}
-                      {canEdit && <AddItemRow onAdd={data => handleAddItem(cat, data)} t={t} />}
+                      {canEdit && <AddItemRow tripCurrency={currency} onAdd={data => handleAddItem(cat, data)} t={t} />}
                     </tbody>
                   </table>
                 </div>
               </div>
             )
-          })}
+          })
+          )}
         </div>
 
         <div className="w-full md:w-[320px]" style={{ flexShrink: 0, position: 'sticky', top: 16, alignSelf: 'flex-start' }}>
@@ -1221,6 +1524,86 @@ export default function BudgetPanel({ tripId, tripMembers = [] }: BudgetPanelPro
                       </div>
                     )
                   })}
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Time Series Chart */}
+          {budgetItems && budgetItems.length > 0 && (() => {
+            const byDate = new Map<string, number>()
+            let unscheduled = 0
+            for (const item of budgetItems) {
+              const val = item.total_price || 0
+              if (item.expense_date) {
+                byDate.set(item.expense_date, (byDate.get(item.expense_date) || 0) + val)
+              } else {
+                unscheduled += val
+              }
+            }
+            if (byDate.size === 0) return null
+            const sortedDates = Array.from(byDate.keys()).sort()
+            const maxVal = Math.max(...Array.from(byDate.values()), unscheduled)
+            const decimals = currencyDecimals(currency)
+            
+            return (
+              <div style={{
+                background: theme.bg,
+                borderRadius: 20, padding: '20px 20px 14px', color: theme.text,
+                border: `1px solid ${theme.border}`,
+                boxShadow: theme.shadow,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                  <div style={{
+                    width: 38, height: 38, borderRadius: 11,
+                    background: theme.iconBg,
+                    border: `1px solid ${theme.iconBorder}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: theme.iconColor, flexShrink: 0,
+                  }}>
+                    <BarChart3 size={18} strokeWidth={2} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 11, color: theme.faint, textTransform: 'uppercase', letterSpacing: '0.09em', fontWeight: 600 }}>{t('budget.byDate') || 'Daily Spending'}</div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 120, marginTop: 16, paddingBottom: 6, borderBottom: `1px solid ${theme.divider}`, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                  {sortedDates.map(date => {
+                    const val = byDate.get(date) || 0
+                    const heightPct = maxVal > 0 ? (val / maxVal) * 100 : 0
+                    const isToday = date === new Date().toISOString().split('T')[0]
+                    return (
+                      <div key={date} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, minWidth: 32, gap: 6, cursor: 'crosshair' }} title={`${date}:\n${Number(val).toLocaleString(locale, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${currency}`}>
+                        <div style={{ width: '100%', height: 90, display: 'flex', alignItems: 'flex-end', position: 'relative' }}>
+                          <div style={{ 
+                            width: '100%', height: `${heightPct}%`, 
+                            background: isToday ? 'var(--accent)' : theme.iconBorder,
+                            borderRadius: '4px 4px 0 0',
+                            transition: 'height 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+                          }} />
+                        </div>
+                        <div style={{ fontSize: 9, color: isToday ? 'var(--accent)' : theme.faint, fontWeight: isToday ? 700 : 500, whiteSpace: 'nowrap' }}>
+                          {date.substring(5).replace('-', '/')}
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {unscheduled > 0 && (
+                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, minWidth: 32, gap: 6, cursor: 'crosshair' }} title={`Unscheduled:\n${Number(unscheduled).toLocaleString(locale, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${currency}`}>
+                        <div style={{ width: '100%', height: 90, display: 'flex', alignItems: 'flex-end', position: 'relative' }}>
+                          <div style={{ 
+                            width: '100%', height: `${(unscheduled / maxVal) * 100}%`, 
+                            background: theme.border,
+                            borderRadius: '4px 4px 0 0',
+                            transition: 'height 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+                          }} />
+                        </div>
+                        <div style={{ fontSize: 9, color: theme.faint, fontWeight: 500, whiteSpace: 'nowrap' }}>
+                          —
+                        </div>
+                      </div>
+                  )}
                 </div>
               </div>
             )
