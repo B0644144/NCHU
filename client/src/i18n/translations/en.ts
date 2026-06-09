@@ -1049,6 +1049,10 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'dayplan.pdf': 'PDF',
   'dayplan.pdfTooltip': 'Export day plan as PDF',
   'dayplan.pdfError': 'Failed to export PDF',
+  'dayplan.warning.longDrive': 'Long transport warning: driving takes over 3 hours',
+  'dayplan.warning.longWalk': 'Long walk warning: walking takes over 30 minutes',
+  'dayplan.warning.longDriveLabel': 'Long Drive',
+  'dayplan.warning.longWalkLabel': 'Long Walk',
 
   // Places Sidebar
   'places.addPlace': 'Add Place/Activity',
@@ -1296,6 +1300,14 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'budget.settlement': 'Settlement',
   'budget.settlementInfo': 'Click a member avatar on a budget item to mark them green — this means they paid. The settlement then shows who owes whom and how much.',
   'budget.netBalances': 'Net Balances',
+  'budget.addCategory': 'Add Category',
+  'budget.searchPlaceholder': 'Search expenses...',
+  'budget.noMatching': 'No matching expenses',
+  'budget.noMatchingDesc': 'Try adjusting your search query or filters',
+  'budget.clearFilters': 'Clear Filters',
+  'budget.filters.categories': 'Categories',
+  'budget.filters.members': 'Members',
+  'budget.filters.all': 'All',
 
   // Files
   'files.title': 'Files',
@@ -1960,6 +1972,13 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'todo.detail.priority': 'Priority',
   'todo.detail.noPriority': 'None',
   'todo.detail.create': 'Create task',
+  'todo.filter.allPriorities': 'All Priorities',
+  'todo.filter.allAssignees': 'All Assignees',
+  'todo.filter.allCategories': 'All Categories',
+  'todo.sort.noSort': 'No Sort',
+  'todo.sort.priorityAsc': 'Priority (High to Low)',
+  'todo.sort.priorityDesc': 'Priority (Low to High)',
+  'todo.sort.dueDate': 'Due Date',
 
   // Notifications — dev test events
   'notif.test.title': '[Test] Notification',

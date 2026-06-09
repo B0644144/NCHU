@@ -451,7 +451,7 @@ export const journeyApi = {
 }
 
 export const mapsApi = {
-  search: (query: string, lang?: string) => apiClient.post(`/maps/search?lang=${lang || 'en'}`, { query }).then(r => r.data),
+  search: (query: string, lang?: string, signal?: AbortSignal) => apiClient.post(`/maps/search?lang=${lang || 'en'}`, { query }, { signal }).then(r => r.data),
   autocomplete: (input: string, lang?: string, locationBias?: { low: { lat: number; lng: number }; high: { lat: number; lng: number } }, signal?: AbortSignal) =>
       apiClient.post('/maps/autocomplete', { input, lang, locationBias }, { signal }).then(r => r.data),
   details: (placeId: string, lang?: string) => apiClient.get(`/maps/details/${encodeURIComponent(placeId)}`, { params: { lang } }).then(r => r.data),
@@ -466,7 +466,7 @@ export const airportsApi = {
 }
 
 export const budgetApi = {
-  list: (tripId: number | string) => apiClient.get(`/trips/${tripId}/budget`).then(r => r.data),
+  list: (tripId: number | string, params?: Record<string, unknown>) => apiClient.get(`/trips/${tripId}/budget`, { params }).then(r => r.data),
   create: (tripId: number | string, data: Record<string, unknown>) => apiClient.post(`/trips/${tripId}/budget`, data).then(r => r.data),
   update: (tripId: number | string, id: number, data: Record<string, unknown>) => apiClient.put(`/trips/${tripId}/budget/${id}`, data).then(r => r.data),
   delete: (tripId: number | string, id: number) => apiClient.delete(`/trips/${tripId}/budget/${id}`).then(r => r.data),
@@ -492,6 +492,15 @@ export const filesApi = {
   addLink: (tripId: number | string, fileId: number, data: { reservation_id?: number; assignment_id?: number }) => apiClient.post(`/trips/${tripId}/files/${fileId}/link`, data).then(r => r.data),
   removeLink: (tripId: number | string, fileId: number, linkId: number) => apiClient.delete(`/trips/${tripId}/files/${fileId}/link/${linkId}`).then(r => r.data),
   getLinks: (tripId: number | string, fileId: number) => apiClient.get(`/trips/${tripId}/files/${fileId}/links`).then(r => r.data),
+}
+
+export const photosApi = {
+  list: (tripId: number | string) => apiClient.get(`/trips/${tripId}/photos`).then(r => r.data),
+  upload: (tripId: number | string, formData: FormData) => apiClient.post(`/trips/${tripId}/photos`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }).then(r => r.data),
+  update: (tripId: number | string, id: number, data: Record<string, unknown>) => apiClient.put(`/trips/${tripId}/photos/${id}`, data).then(r => r.data),
+  delete: (tripId: number | string, id: number) => apiClient.delete(`/trips/${tripId}/photos/${id}`).then(r => r.data),
 }
 
 export const reservationsApi = {

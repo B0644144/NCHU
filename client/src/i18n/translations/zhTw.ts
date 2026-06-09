@@ -1,4 +1,4 @@
-const zhTw: Record<string, string> = {
+const zhTw: Record<string, any> = {
   // Common
   'common.save': '儲存',
   'common.showMore': '顯示更多',
@@ -1024,6 +1024,10 @@ const zhTw: Record<string, string> = {
   'dayplan.pdf': 'PDF',
   'dayplan.pdfTooltip': '匯出當天計劃為 PDF',
   'dayplan.pdfError': 'PDF 匯出失敗',
+  'dayplan.warning.longDrive': '長時間交通警告：行車時間超過 3 小時',
+  'dayplan.warning.longWalk': '長距離步行警告：步行時間超過 30 分鐘',
+  'dayplan.warning.longDriveLabel': '長途車程',
+  'dayplan.warning.longWalkLabel': '長途步行',
   'dayplan.cannotReorderTransport': '有固定時間的預訂無法重新排序',
   'dayplan.confirmRemoveTimeTitle': '移除時間？',
   'dayplan.confirmRemoveTimeBody': '此地點有固定時間（{time}）。移動後將移除時間並允許自由排序。',
@@ -1892,6 +1896,13 @@ const zhTw: Record<string, string> = {
   'todo.detail.priority': '優先順序',
   'todo.detail.noPriority': '無',
   'todo.detail.create': '建立任務',
+  'todo.filter.allPriorities': '所有優先級',
+  'todo.filter.allAssignees': '所有負責人',
+  'todo.filter.allCategories': '所有分類',
+  'todo.sort.noSort': '不排序',
+  'todo.sort.priorityAsc': '優先級 (高到低)',
+  'todo.sort.priorityDesc': '優先級 (低到高)',
+  'todo.sort.dueDate': '到期日',
 
   // Notifications
   'notifications.title': '通知',

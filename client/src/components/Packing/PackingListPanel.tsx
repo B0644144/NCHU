@@ -7,8 +7,9 @@ import { packingApi, tripsApi, adminApi } from '../../api/client'
 import ReactDOM from 'react-dom'
 import {
   CheckSquare, Square, Trash2, Plus, ChevronDown, ChevronRight,
-  X, Pencil, Check, MoreHorizontal, CheckCheck, RotateCcw, Luggage, UserPlus, Package, FolderPlus, Upload,
+  X, Pencil, Check, MoreHorizontal, CheckCheck, RotateCcw, Luggage, UserPlus, Package, FolderPlus, Upload, SlidersHorizontal
 } from 'lucide-react'
+import PropertiesEditor from '../shared/PropertiesEditor'
 import type { PackingItem } from '../../types'
 
 const VORSCHLAEGE = [
@@ -67,7 +68,7 @@ function katColor(kat, allCategories) {
   return KAT_COLORS[Math.abs(h) % KAT_COLORS.length]
 }
 
-interface PackingBag { id: number; trip_id: number; name: string; color: string; weight_limit_grams: number | null; user_id?: number | null; assigned_username?: string | null }
+interface PackingBag { id: number; trip_id: number; name: string; color: string; weight_limit_grams: number | null; user_id?: number | null; assigned_username?: string | null; members?: { user_id: number, username: string, avatar: string | null }[] }
 
 // ── Bag Card ──────────────────────────────────────────────────────────────
 
@@ -221,6 +222,8 @@ function ArtikelZeile({ item, tripId, categories, onCategoryChange, bagTrackingE
   const [showBagPicker, setShowBagPicker] = useState(false)
   const [bagInlineCreate, setBagInlineCreate] = useState(false)
   const [bagInlineName, setBagInlineName] = useState('')
+  const [showProps, setShowProps] = useState(false)
+  const hasProps = Object.keys(item.properties || {}).length > 0
   const { togglePackingItem, updatePackingItem, deletePackingItem } = useTripStore()
   const toast = useToast()
   const { t } = useTranslation()
@@ -246,17 +249,18 @@ function ArtikelZeile({ item, tripId, categories, onCategoryChange, bagTrackingE
   }
 
   return (
-    <div
-      className="group"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => { setHovered(false); setShowCatPicker(false); setShowBagPicker(false) }}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        padding: '6px 10px', borderRadius: 10, position: 'relative',
-        background: hovered ? 'var(--bg-secondary)' : 'transparent',
-        transition: 'background 0.1s',
-      }}
-    >
+    <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+      <div
+        className="group"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => { setHovered(false); setShowCatPicker(false); setShowBagPicker(false) }}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '6px 10px', borderRadius: 10, position: 'relative',
+          background: hovered ? 'var(--bg-secondary)' : 'transparent',
+          transition: 'background 0.1s',
+        }}
+      >
       <button onClick={handleToggle} style={{
         flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer', padding: 0, position: 'relative',
         width: 18, height: 18,
@@ -437,11 +441,27 @@ function ArtikelZeile({ item, tripId, categories, onCategoryChange, bagTrackingE
           <Pencil size={13} />
         </button>
 
+        <button onClick={() => setShowProps(p => !p)} title="Properties" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '3px 4px', borderRadius: 6, display: 'flex', color: (showProps || hasProps) ? 'var(--text-secondary)' : 'var(--text-faint)' }}
+          onMouseEnter={e => e.currentTarget.style.color = 'var(--text-secondary)'} onMouseLeave={e => e.currentTarget.style.color = (showProps || hasProps) ? 'var(--text-secondary)' : 'var(--text-faint)'}>
+          <SlidersHorizontal size={13} />
+        </button>
+
         <button onClick={handleDelete} title={t('common.delete')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '3px 4px', borderRadius: 6, display: 'flex', color: 'var(--text-faint)' }}
           onMouseEnter={e => e.currentTarget.style.color = '#ef4444'} onMouseLeave={e => e.currentTarget.style.color = 'var(--text-faint)'}>
           <Trash2 size={13} />
         </button>
       </div>
+      )}
+      </div>
+
+      {(showProps || hasProps) && (
+        <div style={{ paddingLeft: 34, paddingRight: 10, paddingBottom: 6 }}>
+          <PropertiesEditor
+            properties={item.properties || {}}
+            onChange={(newProps) => updatePackingItem(tripId, item.id, { properties: newProps })}
+            readOnly={!canEdit}
+          />
+        </div>
       )}
     </div>
   )
@@ -726,7 +746,7 @@ interface MenuItemProps {
   icon: React.ReactNode
   label: string
   onClick: () => void
-  danger: boolean
+  danger?: boolean
 }
 
 function MenuItem({ icon, label, onClick, danger }: MenuItemProps) {
@@ -806,7 +826,7 @@ export default function PackingListPanel({ tripId, items, openImportSignal = 0, 
       if (filter === 'erledigt') return i.checked
       return true
     })
-    const groups = {}
+    const groups: Record<string, PackingItem[]> = {}
     for (const item of filtered) {
       const kat = item.category || t('packing.defaultCategory')
       if (!groups[kat]) groups[kat] = []

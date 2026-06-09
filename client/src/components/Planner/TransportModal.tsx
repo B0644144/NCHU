@@ -139,8 +139,8 @@ export function TransportModal({ isOpen, onClose, onSave, reservation, days, sel
         title: reservation.title || '',
         type,
         status: reservation.status || 'pending',
-        start_day_id: reservation.day_id ?? '',
-        end_day_id: reservation.end_day_id ?? '',
+        start_day_id: String(reservation.day_id ?? ''),
+        end_day_id: String(reservation.end_day_id ?? ''),
         departure_time: splitReservationDateTime(reservation.reservation_time).time ?? '',
         arrival_time: splitReservationDateTime(reservation.reservation_end_time).time ?? '',
         confirmation_number: reservation.confirmation_number || '',
@@ -161,7 +161,7 @@ export function TransportModal({ isOpen, onClose, onSave, reservation, days, sel
         setToPick({ location: locationFromEndpoint(to) || undefined })
       }
     } else {
-      setForm({ ...defaultForm, start_day_id: selectedDayId ?? '', end_day_id: selectedDayId ?? '' })
+      setForm({ ...defaultForm, start_day_id: String(selectedDayId ?? ''), end_day_id: String(selectedDayId ?? '') })
       setFromPick({})
       setToPick({})
     }
@@ -300,7 +300,7 @@ export function TransportModal({ isOpen, onClose, onSave, reservation, days, sel
       const dateBadge = d.date ? (formatDate(d.date, locale) ?? undefined) : undefined
       const dayBadge = d.title ? t('dayplan.dayN', { n: d.day_number }) : undefined
       return {
-        value: d.id,
+        value: String(d.id),
         label: d.title || t('dayplan.dayN', { n: d.day_number }),
         badge: dateBadge ?? dayBadge,
       }
@@ -379,7 +379,7 @@ export function TransportModal({ isOpen, onClose, onSave, reservation, days, sel
               {form.type === 'flight' ? t('reservations.departureDate') : form.type === 'car' ? t('reservations.pickupDate') : t('reservations.date')}
             </label>
             <CustomSelect
-              value={form.start_day_id}
+              value={String(form.start_day_id)}
               onChange={value => set('start_day_id', value)}
               placeholder={t('dayplan.dayN', { n: '?' })}
               options={dayOptions}
@@ -409,7 +409,7 @@ export function TransportModal({ isOpen, onClose, onSave, reservation, days, sel
               {form.type === 'flight' ? t('reservations.arrivalDate') : form.type === 'car' ? t('reservations.returnDate') : t('reservations.endDate')}
             </label>
             <CustomSelect
-              value={form.end_day_id}
+              value={String(form.end_day_id)}
               onChange={value => set('end_day_id', value)}
               placeholder={t('dayplan.dayN', { n: '?' })}
               options={dayOptions}

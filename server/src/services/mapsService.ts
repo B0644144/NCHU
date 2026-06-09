@@ -607,21 +607,20 @@ export async function getPlacePhoto(
   lat: number,
   lng: number,
   name?: string,
-): Promise<{ photoUrl: string; attribution: string | null }> {
+): Promise<{ photoUrl: string | null; attribution: string | null }> {
   // Disk cache hit — serve immediately, no Google call
   const diskHit = placePhotoCache.get(placeId);
   if (diskHit) return { photoUrl: diskHit.photoUrl, attribution: diskHit.attribution };
 
   // Recent error — don't hammer the API
   if (placePhotoCache.getErrored(placeId)) {
-    throw Object.assign(new Error('(Cache) No photo available'), { status: 404 });
+    throw Object.assign(new Error('No photo available'), { status: 404 });
   }
 
-  // Deduplicate concurrent requests for the same placeId
   const existing = placePhotoCache.getInFlight(placeId);
   if (existing) {
     const result = await existing;
-    if (!result) throw Object.assign(new Error('(Cache) No photo available'), { status: 404 });
+    if (!result) throw Object.assign(new Error('No photo available'), { status: 404 });
     return { photoUrl: `/api/maps/place-photo/${encodeURIComponent(placeId)}/bytes`, attribution: result.attribution };
   }
 

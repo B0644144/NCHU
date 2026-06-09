@@ -37,6 +37,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     mapbox_style: 'mapbox://styles/mapbox/standard',
     mapbox_3d_enabled: true,
     mapbox_quality_mode: false,
+    ski_mode: false,
   },
   isLoaded: false,
 

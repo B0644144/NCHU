@@ -109,12 +109,14 @@ function createTables(db: Database.Database): void {
       place_time TEXT,
       end_time TEXT,
       duration_minutes INTEGER DEFAULT 60,
+      time_locked INTEGER DEFAULT 0,
       notes TEXT,
       image_url TEXT,
       google_place_id TEXT,
       website TEXT,
       phone TEXT,
       transport_mode TEXT DEFAULT 'walking',
+      properties TEXT DEFAULT '{}',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -144,6 +146,7 @@ function createTables(db: Database.Database): void {
       checked INTEGER DEFAULT 0,
       category TEXT,
       sort_order INTEGER DEFAULT 0,
+      properties TEXT DEFAULT '{}',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -190,6 +193,7 @@ function createTables(db: Database.Database): void {
       notes TEXT,
       status TEXT DEFAULT 'pending',
       type TEXT DEFAULT 'other',
+      properties TEXT DEFAULT '{}',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -210,6 +214,7 @@ function createTables(db: Database.Database): void {
       time TEXT,
       icon TEXT DEFAULT '📝',
       sort_order REAL DEFAULT 0,
+      category TEXT DEFAULT 'general',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -224,10 +229,14 @@ function createTables(db: Database.Database): void {
       category TEXT NOT NULL DEFAULT 'Other',
       name TEXT NOT NULL,
       total_price REAL NOT NULL DEFAULT 0,
+      currency TEXT,
+      original_amount REAL,
+      exchange_rate REAL DEFAULT 1.0,
       persons INTEGER DEFAULT NULL,
       days INTEGER DEFAULT NULL,
       note TEXT,
       sort_order INTEGER DEFAULT 0,
+      properties TEXT DEFAULT '{}',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 

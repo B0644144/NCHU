@@ -1,4 +1,5 @@
 // Shared types for the TREK travel planner
+import type React from 'react'
 
 export interface User {
   id: number
@@ -17,15 +18,25 @@ export interface User {
 export interface Trip {
   id: number
   name: string
+  /** Alias for name - some components use title */
+  title?: string
   description: string | null
   start_date: string
   end_date: string
   cover_url: string | null
+  /** Alias for cover_url - some components use cover_image */
+  cover_image?: string | null
   is_archived: boolean
   reminder_days: number
   owner_id: number
+  /** User id alias */
+  user_id?: number
   created_at: string
   updated_at: string
+  /** Number of days in the trip */
+  day_count?: number
+  /** Trip-level currency code */
+  currency?: string | null
 }
 
 export interface Day {
@@ -59,10 +70,15 @@ export interface Place {
   place_time: string | null
   end_time: string | null
   duration_minutes: number | null
+  time_locked: number | boolean | null
   transport_mode: string | null
   website: string | null
   phone: string | null
   created_at: string
+  /** Category reference (joined) */
+  category?: string | null
+  /** Custom Notion-like properties */
+  properties?: Record<string, any>
 }
 
 export interface Assignment {
@@ -72,6 +88,16 @@ export interface Assignment {
   order_index: number
   notes: string | null
   place: Place
+  /** Participants attached to this assignment */
+  participants?: TripMember[]
+  /** Multi-day assignment start day */
+  start_day_id?: number | null
+  /** Multi-day assignment end day */
+  end_day_id?: number | null
+  /** Internal assignment id for planner */
+  _assignmentId?: number
+  /** Sort order for PDF export */
+  sort_order?: number
 }
 
 export interface DayNote {
@@ -81,6 +107,7 @@ export interface DayNote {
   time: string | null
   icon: string | null
   sort_order?: number
+  category?: string
   created_at: string
 }
 
@@ -91,6 +118,20 @@ export interface PackingItem {
   category: string | null
   checked: number
   quantity: number
+  /** Weight in grams */
+  weight_grams?: number | null
+  /** Bag/group id */
+  bag_id?: number | null
+  /** Custom Notion-like properties */
+  properties?: Record<string, any>
+}
+
+export interface PackingBag {
+  id: number
+  trip_id: number
+  name: string
+  /** Members who share this bag */
+  members?: TripMember[]
 }
 
 export interface TodoItem {
@@ -104,6 +145,8 @@ export interface TodoItem {
   description: string | null
   assigned_user_id: number | null
   priority: number
+  /** Custom Notion-like properties */
+  properties?: Record<string, any>
 }
 
 export interface Tag {
@@ -118,6 +161,8 @@ export interface Category {
   name: string
   icon: string | null
   user_id: number
+  /** Hex colour for this category */
+  color?: string | null
 }
 
 export interface BudgetItem {
@@ -131,11 +176,26 @@ export interface BudgetItem {
   persons: number
   members: BudgetMember[]
   expense_date: string | null
+  /** Computed total price (original_amount * exchange_rate or custom) */
+  total_price?: number | null
+  original_amount?: number | null
+  exchange_rate?: number
+  /** Number of days this expense spans */
+  days?: number | null
+  /** Optional note */
+  note?: string | null
+  /** Linked reservation id */
+  reservation_id?: number | null
+  sort_order?: number
+  /** Custom Notion-like properties */
+  properties?: Record<string, any>
 }
 
 export interface BudgetMember {
   user_id: number
   paid: boolean
+  username?: string
+  avatar_url?: string | null
 }
 
 export interface ReservationEndpoint {
@@ -180,6 +240,10 @@ export interface Reservation {
   needs_review?: number
   endpoints?: ReservationEndpoint[]
   created_at: string
+  /** Accommodation name for display purposes */
+  accommodation_name?: string | null
+  /** Custom Notion-like properties */
+  properties?: Record<string, any>
 }
 
 export interface TripFile {
@@ -187,6 +251,7 @@ export interface TripFile {
   trip_id: number
   place_id?: number | null
   reservation_id?: number | null
+  assignment_id?: number | null
   note_id?: number | null
   uploaded_by?: number | null
   uploaded_by_name?: string | null
@@ -201,6 +266,8 @@ export interface TripFile {
   created_at: string
   reservation_title?: string
   linked_reservation_ids?: number[]
+  /** Linked place ids for file-to-place association */
+  linked_place_ids?: number[] | null
   url?: string
 }
 
@@ -223,6 +290,7 @@ export interface Settings {
   mapbox_style?: string
   mapbox_3d_enabled?: boolean
   mapbox_quality_mode?: boolean
+  ski_mode?: boolean
 }
 
 export interface AssignmentsMap {
@@ -239,6 +307,8 @@ export interface RouteSegment {
   to: [number, number]
   walkingText: string
   drivingText: string
+  distance: number
+  duration: number
 }
 
 export interface RouteResult {
@@ -254,6 +324,8 @@ export interface RouteResult {
 export interface Waypoint {
   lat: number
   lng: number
+  /** Internal assignment id */
+  _assignmentId?: number
 }
 
 // User with optional OIDC fields
@@ -274,6 +346,12 @@ export interface Accommodation {
   notes: string | null
   url: string | null
   created_at: string
+  /** Linked place id */
+  place_id?: number | null
+  /** Start day id for multi-day stays */
+  start_day_id?: number | null
+  /** End day id for multi-day stays */
+  end_day_id?: number | null
 }
 
 // Trip member (owner or collaborator)
@@ -282,6 +360,8 @@ export interface TripMember {
   username: string
   email?: string
   avatar_url?: string | null
+  /** Alias for avatar_url */
+  avatar?: string | null
   role?: string
 }
 
@@ -297,6 +377,10 @@ export interface Photo {
   place_id: number | null
   day_id: number | null
   created_at: string
+  /** Public URL for display */
+  url?: string | null
+  /** File size in bytes */
+  file_size?: number | null
 }
 
 // Atlas place detail
@@ -377,6 +461,8 @@ export interface VacayPlan {
   owner_id?: number
   created_at?: string
   updated_at?: string
+  /** Weekend days override (0=Sun, 6=Sat) */
+  weekend_days?: number[] | null
 }
 
 export interface VacayUser {
@@ -397,6 +483,22 @@ export interface VacayStat {
   user_id: number
   vacation_days: number
   used: number
+  /** Extended fields populated by UI */
+  username?: string
+  avatar_url?: string | null
+  color?: string | null
+  total_available?: number
+}
+
+export interface VacayStatExtended extends VacayStat {
+  username: string
+  avatar_url?: string | null
+  color?: string | null
+  total_available: number
+  remaining: number
+  carried_over: number
+  person_name: string
+  person_color: string | null
 }
 
 export interface HolidayInfo {
@@ -436,4 +538,71 @@ export interface MergedItem {
   type: 'assignment' | 'note' | 'place' | 'transport'
   sortKey: number
   data: Assignment | DayNote | Reservation
+}
+
+// Addon
+export interface Addon {
+  id: string
+  name: string
+  enabled?: boolean
+  [key: string]: unknown
+}
+
+// Poll types
+export interface PollOption {
+  id: number
+  poll_id: number
+  text: string
+  votes: number
+  label?: string | null
+}
+
+export interface Poll {
+  id: number
+  trip_id: number
+  question: string
+  options: PollOption[]
+  multi_choice: boolean
+  /** Alias for multi_choice */
+  multiple_choice?: boolean
+  created_at: string
+}
+
+// Collab note
+export interface CollabNote {
+  id: number
+  trip_id: number
+  title: string
+  content: string
+  category: string
+  website: string
+  color?: string | null
+  attachments?: TripFile[] | null
+  created_at: string
+  updated_at: string
+}
+
+// Incoming invite
+export interface IncomingInvite {
+  id?: number
+  username?: string
+  token?: string
+  trip_name?: string
+  [key: string]: unknown
+}
+
+// Pending invite
+export interface PendingInvite {
+  id?: number
+  token?: string
+  email?: string
+  [key: string]: unknown
+}
+
+// Select option
+export interface SelectOption {
+  value: string | number
+  label: string
+  badge?: string
+  icon?: React.ReactNode
 }

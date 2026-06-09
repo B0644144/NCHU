@@ -211,7 +211,7 @@ export default function LoginPage(): React.ReactElement {
           </div>
         ) : mode === 'select' ? (
           <div style={{ textAlign: 'center', width: '100%', maxWidth: 1000 }}>
-            <h1 style={{ fontSize: '3.5vw', minFontSize: 32, fontWeight: 500, margin: '0 0 32px' }}>
+            <h1 style={{ fontSize: 'clamp(32px, 3.5vw, 64px)', fontWeight: 500, margin: '0 0 32px' }}>
               Who's planning?
             </h1>
 
@@ -221,7 +221,7 @@ export default function LoginPage(): React.ReactElement {
               </div>
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '2vw', minGap: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: 'clamp(16px, 2vw, 32px)' }}>
               {users.map((u) => (
                 <div 
                   key={u.id} 

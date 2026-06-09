@@ -10,27 +10,34 @@ export function verifyTripAccess(tripId: string | number, userId: number) {
 // ── Items ──────────────────────────────────────────────────────────────────
 
 export function listItems(tripId: string | number) {
-  return db.prepare(
+  return (db.prepare(
     'SELECT * FROM packing_items WHERE trip_id = ? ORDER BY sort_order ASC, created_at ASC'
-  ).all(tripId);
+  ).all(tripId) as any[]).map(item => ({
+    ...item,
+    properties: item.properties ? (typeof item.properties === 'string' ? JSON.parse(item.properties) : item.properties) : undefined
+  }));
 }
 
-export function createItem(tripId: string | number, data: { name: string; category?: string; checked?: boolean; quantity?: number }) {
+export function createItem(tripId: string | number, data: { name: string; category?: string; checked?: boolean; quantity?: number; properties?: Record<string, any> }) {
   const maxOrder = db.prepare('SELECT MAX(sort_order) as max FROM packing_items WHERE trip_id = ?').get(tripId) as { max: number | null };
   const sortOrder = (maxOrder.max !== null ? maxOrder.max : -1) + 1;
   const qty = Math.max(1, Math.min(999, Number(data.quantity) || 1));
 
   const result = db.prepare(
-    'INSERT INTO packing_items (trip_id, name, checked, category, sort_order, quantity) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(tripId, data.name, data.checked ? 1 : 0, data.category || 'Allgemein', sortOrder, qty);
+    'INSERT INTO packing_items (trip_id, name, checked, category, sort_order, quantity, properties) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(tripId, data.name, data.checked ? 1 : 0, data.category || 'Allgemein', sortOrder, qty, data.properties ? JSON.stringify(data.properties) : '{}');
 
-  return db.prepare('SELECT * FROM packing_items WHERE id = ?').get(result.lastInsertRowid);
+  const created = db.prepare('SELECT * FROM packing_items WHERE id = ?').get(result.lastInsertRowid) as any;
+  if (created && created.properties) {
+    created.properties = typeof created.properties === 'string' ? JSON.parse(created.properties) : created.properties;
+  }
+  return created;
 }
 
 export function updateItem(
   tripId: string | number,
   id: string | number,
-  data: { name?: string; checked?: number; category?: string; weight_grams?: number | null; bag_id?: number | null; quantity?: number },
+  data: { name?: string; checked?: number; category?: string; weight_grams?: number | null; bag_id?: number | null; quantity?: number; properties?: Record<string, any> },
   bodyKeys: string[]
 ) {
   const item = db.prepare('SELECT * FROM packing_items WHERE id = ? AND trip_id = ?').get(id, tripId);
@@ -43,7 +50,8 @@ export function updateItem(
       category = COALESCE(?, category),
       weight_grams = CASE WHEN ? THEN ? ELSE weight_grams END,
       bag_id = CASE WHEN ? THEN ? ELSE bag_id END,
-      quantity = CASE WHEN ? THEN ? ELSE quantity END
+      quantity = CASE WHEN ? THEN ? ELSE quantity END,
+      properties = CASE WHEN ? THEN ? ELSE properties END
     WHERE id = ?
   `).run(
     data.name || null,
@@ -56,10 +64,16 @@ export function updateItem(
     data.bag_id ?? null,
     bodyKeys.includes('quantity') ? 1 : 0,
     data.quantity ? Math.max(1, Math.min(999, Number(data.quantity))) : 1,
+    bodyKeys.includes('properties') || data.properties !== undefined ? 1 : 0,
+    data.properties !== undefined ? (data.properties ? JSON.stringify(data.properties) : '{}') : null,
     id
   );
 
-  return db.prepare('SELECT * FROM packing_items WHERE id = ?').get(id);
+  const updated = db.prepare('SELECT * FROM packing_items WHERE id = ?').get(id) as any;
+  if (updated && updated.properties) {
+    updated.properties = typeof updated.properties === 'string' ? JSON.parse(updated.properties) : updated.properties;
+  }
+  return updated;
 }
 
 export function deleteItem(tripId: string | number, id: string | number) {

@@ -78,7 +78,7 @@ function CreatePollModal({ onClose, onCreate, t }: CreatePollModalProps) {
     if (!canSubmit) return
     setSubmitting(true)
     try {
-      await onCreate({ question: question.trim(), options: options.filter(o => o.trim()), multiple_choice: multiChoice })
+      await onCreate({ question: question.trim(), options: options.filter(o => o.trim()), multi_choice: multiChoice })
       onClose()
     } catch {} finally { setSubmitting(false) }
   }
@@ -230,7 +230,7 @@ function PollCard({ poll, currentUser, canEdit, onVote, onClose, onDelete, t }: 
                 <Clock size={8} /> {remaining}
               </span>
             )}
-            {poll.multiple_choice && (
+            {poll.multi_choice && (
               <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--text-faint)', background: 'var(--bg-tertiary)', padding: '2px 7px', borderRadius: 99 }}>
                 {t('collab.polls.multiChoice')}
               </span>
@@ -305,7 +305,7 @@ function PollCard({ poll, currentUser, canEdit, onVote, onClose, onDelete, t }: 
                 flex: 1, fontSize: 13, fontWeight: myVote || isWinner ? 600 : 400,
                 color: 'var(--text-primary)', position: 'relative', zIndex: 1,
               }}>
-                {typeof opt === 'string' ? opt : opt.label || opt}
+                {typeof opt === 'string' ? opt : opt.text || (opt as any).label || ''}
               </span>
 
               {/* Voter avatars */}

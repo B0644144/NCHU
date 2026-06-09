@@ -17,6 +17,7 @@ import JourneyPage from './pages/JourneyPage'
 import JourneyDetailPage from './pages/JourneyDetailPage'
 import JourneyPublicPage from './pages/JourneyPublicPage'
 import SharedTripPage from './pages/SharedTripPage'
+import SkiHubPage from './pages/SkiHubPage'
 import InAppNotificationsPage from './pages/InAppNotificationsPage.tsx'
 import OAuthAuthorizePage from './pages/OAuthAuthorizePage'
 import { ToastContainer } from './components/shared/Toast'
@@ -272,6 +273,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <AtlasPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/ski"
+          element={
+            <ProtectedRoute>
+              <SkiHubPage />
             </ProtectedRoute>
           }
         />

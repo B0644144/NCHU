@@ -66,7 +66,10 @@ describe('BudgetPanel', () => {
       http.get('/api/trips/1/budget', () => HttpResponse.json({ items: [item] }))
     );
     render(<BudgetPanel tripId={1} />);
-    await screen.findByText('Transport');
+    await waitFor(() => {
+      const spans = screen.getAllByText('Transport').filter(el => el.tagName === 'SPAN');
+      expect(spans.length).toBeGreaterThan(0);
+    });
   });
 
   it('FE-COMP-BUDGET-006: renders budget table headers', async () => {
@@ -169,8 +172,12 @@ describe('BudgetPanel', () => {
       http.get('/api/trips/1/budget', () => HttpResponse.json({ items: [item1, item2] }))
     );
     render(<BudgetPanel tripId={1} />);
-    await screen.findByText('Transport');
-    await screen.findByText('Hotels');
+    await waitFor(() => {
+      const transportSpans = screen.getAllByText('Transport').filter(el => el.tagName === 'SPAN');
+      const hotelsSpans = screen.getAllByText('Hotels').filter(el => el.tagName === 'SPAN');
+      expect(transportSpans.length).toBeGreaterThan(0);
+      expect(hotelsSpans.length).toBeGreaterThan(0);
+    });
   });
 
   it('FE-COMP-BUDGET-015: currency from settings store is used for default_currency display', async () => {
@@ -200,7 +207,10 @@ describe('BudgetPanel', () => {
       http.get('/api/trips/1/budget', () => HttpResponse.json({ items: [item] }))
     );
     render(<BudgetPanel tripId={1} />);
-    await screen.findByText('ToDelete');
+    await waitFor(() => {
+      const spans = screen.getAllByText('ToDelete').filter(el => el.tagName === 'SPAN');
+      expect(spans.length).toBeGreaterThan(0);
+    });
     expect(screen.getByTitle('Delete Category')).toBeInTheDocument();
   });
 
@@ -352,7 +362,10 @@ describe('BudgetPanel', () => {
     render(<BudgetPanel tripId={1} />);
     const input = await screen.findByPlaceholderText('Enter category name...');
     await user.type(input, 'Souvenirs{Enter}');
-    await screen.findByText('Souvenirs');
+    await waitFor(() => {
+      const spans = screen.getAllByText('Souvenirs').filter(el => el.tagName === 'SPAN');
+      expect(spans.length).toBeGreaterThan(0);
+    });
   });
 
   it('FE-COMP-BUDGET-029: settlement section renders flows with usernames', async () => {
@@ -382,8 +395,14 @@ describe('BudgetPanel', () => {
     const settlementBtn = await screen.findByRole('button', { name: /settlement/i });
     await user.click(settlementBtn);
     // alice and bob should appear in balances section
-    await screen.findByText('alice');
-    await screen.findByText('bob');
+    await waitFor(() => {
+      const spans = screen.getAllByText('alice').filter(el => el.tagName === 'SPAN');
+      expect(spans.length).toBeGreaterThan(0);
+    });
+    await waitFor(() => {
+      const spans = screen.getAllByText('bob').filter(el => el.tagName === 'SPAN');
+      expect(spans.length).toBeGreaterThan(0);
+    });
   });
 
   it('FE-COMP-BUDGET-030: per-person summary renders usernames', async () => {
@@ -404,7 +423,10 @@ describe('BudgetPanel', () => {
     ];
     render(<BudgetPanel tripId={1} tripMembers={tripMembers} />);
     await screen.findByText('Shared Dinner');
-    await screen.findByText('testuser');
+    await waitFor(() => {
+      const divs = screen.getAllByText('testuser').filter(el => el.tagName === 'DIV');
+      expect(divs.length).toBeGreaterThan(0);
+    });
   });
 
   it('FE-COMP-BUDGET-032: grand total row shows sum across all categories', async () => {
@@ -475,7 +497,10 @@ describe('BudgetPanel', () => {
     // Trigger settlement display
     const settlementBtn = await screen.findByRole('button', { name: /settlement/i });
     await user.click(settlementBtn);
-    await screen.findByText('alice');
+    await waitFor(() => {
+      const spans = screen.getAllByText('alice').filter(el => el.tagName === 'SPAN');
+      expect(spans.length).toBeGreaterThan(0);
+    });
     // Avatar image should be rendered for alice
     const avatarImg = screen.getAllByRole('img');
     expect(avatarImg.length).toBeGreaterThan(0);
@@ -494,5 +519,98 @@ describe('BudgetPanel', () => {
     // When expense_date is null, the fallback '—' is shown
     const dashes = screen.getAllByText('—');
     expect(dashes.length).toBeGreaterThan(0);
+  });
+
+  it('FE-COMP-BUDGET-037: search filter dynamically narrows down list of budget items', async () => {
+    const user = userEvent.setup();
+    const item1 = buildBudgetItem({ trip_id: 1, category: 'Food', name: 'Tokyo Lunch' });
+    const item2 = buildBudgetItem({ trip_id: 1, category: 'Transport', name: 'Rome Train' });
+    server.use(
+      http.get('/api/trips/1/budget', () => HttpResponse.json({ items: [item1, item2] }))
+    );
+    render(<BudgetPanel tripId={1} />);
+    await screen.findByText('Tokyo Lunch');
+    await screen.findByText('Rome Train');
+
+    const searchInput = screen.getByPlaceholderText('Search expenses...');
+    await user.type(searchInput, 'Tokyo');
+
+    expect(screen.getByText('Tokyo Lunch')).toBeInTheDocument();
+    expect(screen.queryByText('Rome Train')).not.toBeInTheDocument();
+  });
+
+  it('FE-COMP-BUDGET-038: category tag pills filter items by category', async () => {
+    const user = userEvent.setup();
+    const item1 = buildBudgetItem({ trip_id: 1, category: 'Food', name: 'Lunch' });
+    const item2 = buildBudgetItem({ trip_id: 1, category: 'Transport', name: 'Flight' });
+    server.use(
+      http.get('/api/trips/1/budget', () => HttpResponse.json({ items: [item1, item2] }))
+    );
+    render(<BudgetPanel tripId={1} />);
+    await screen.findByText('Lunch');
+    await screen.findByText('Flight');
+
+    // Category button named "Food"
+    const foodPill = screen.getAllByRole('button').find(b => b.textContent?.trim() === 'Food');
+    expect(foodPill).toBeDefined();
+    await user.click(foodPill!);
+
+    expect(screen.getByText('Lunch')).toBeInTheDocument();
+    expect(screen.queryByText('Flight')).not.toBeInTheDocument();
+  });
+
+  it('FE-COMP-BUDGET-039: member tag pills filter items by participant', async () => {
+    const user = userEvent.setup();
+    const item1 = {
+      ...buildBudgetItem({ trip_id: 1, category: 'Food', name: 'Alice Dinner' }),
+      members: [{ user_id: 1, username: 'alice', avatar_url: null, paid: false }]
+    };
+    const item2 = {
+      ...buildBudgetItem({ trip_id: 1, category: 'Food', name: 'Bob Train' }),
+      members: [{ user_id: 2, username: 'bob', avatar_url: null, paid: false }]
+    };
+    server.use(
+      http.get('/api/trips/1/budget', () => HttpResponse.json({ items: [item1, item2] }))
+    );
+    const tripMembers = [
+      { id: 1, username: 'alice', avatar_url: null },
+      { id: 2, username: 'bob', avatar_url: null },
+    ];
+    render(<BudgetPanel tripId={1} tripMembers={tripMembers} />);
+    await screen.findByText('Alice Dinner');
+    await screen.findByText('Bob Train');
+
+    // Click member pill for alice
+    const alicePill = screen.getAllByRole('button').find(b => b.textContent?.trim().includes('alice'));
+    expect(alicePill).toBeDefined();
+    await user.click(alicePill!);
+
+    expect(screen.getByText('Alice Dinner')).toBeInTheDocument();
+    expect(screen.queryByText('Bob Train')).not.toBeInTheDocument();
+  });
+
+  it('FE-COMP-BUDGET-040: clearing filters shows all items again', async () => {
+    const user = userEvent.setup();
+    const item1 = buildBudgetItem({ trip_id: 1, category: 'Food', name: 'Lunch' });
+    const item2 = buildBudgetItem({ trip_id: 1, category: 'Transport', name: 'Flight' });
+    server.use(
+      http.get('/api/trips/1/budget', () => HttpResponse.json({ items: [item1, item2] }))
+    );
+    render(<BudgetPanel tripId={1} />);
+    await screen.findByText('Lunch');
+    await screen.findByText('Flight');
+
+    const searchInput = screen.getByPlaceholderText('Search expenses...');
+    await user.type(searchInput, 'NothingMatchesThis');
+
+    await screen.findByText('No matching expenses');
+    expect(screen.queryByText('Lunch')).not.toBeInTheDocument();
+
+    // Click "Clear Filters" button
+    const clearBtn = screen.getByRole('button', { name: /Clear Filters/i });
+    await user.click(clearBtn);
+
+    await screen.findByText('Lunch');
+    await screen.findByText('Flight');
   });
 });

@@ -66,7 +66,7 @@ describe('dayTotalCost', () => {
     const assignments = {
       '1': [
         { id: 1, day_id: 1, order_index: 0, notes: null, place: { id: 1, trip_id: 1, name: 'P', lat: null, lng: null, description: null, address: null, category_id: null, icon: null, price: null, image_url: null, google_place_id: null, osm_id: null, route_geometry: null, place_time: null, end_time: null, created_at: '' } },
-      ],
+      ] as any,
     };
     expect(dayTotalCost(1, assignments, 'EUR')).toBeNull();
   });
@@ -76,7 +76,7 @@ describe('dayTotalCost', () => {
       '1': [
         { id: 1, day_id: 1, order_index: 0, notes: null, place: { id: 1, trip_id: 1, name: 'A', lat: null, lng: null, description: null, address: null, category_id: null, icon: null, price: '20', image_url: null, google_place_id: null, osm_id: null, route_geometry: null, place_time: null, end_time: null, created_at: '' } },
         { id: 2, day_id: 1, order_index: 1, notes: null, place: { id: 2, trip_id: 1, name: 'B', lat: null, lng: null, description: null, address: null, category_id: null, icon: null, price: '30', image_url: null, google_place_id: null, osm_id: null, route_geometry: null, place_time: null, end_time: null, created_at: '' } },
-      ],
+      ] as any,
     };
     expect(dayTotalCost(1, assignments, 'EUR')).toBe('50 EUR');
   });
@@ -85,7 +85,7 @@ describe('dayTotalCost', () => {
     const assignments = {
       '1': [
         { id: 1, day_id: 1, order_index: 0, notes: null, place: { id: 1, trip_id: 1, name: 'A', lat: null, lng: null, description: null, address: null, category_id: null, icon: null, price: 'free', image_url: null, google_place_id: null, osm_id: null, route_geometry: null, place_time: null, end_time: null, created_at: '' } },
-      ],
+      ] as any,
     };
     expect(dayTotalCost(1, assignments, 'EUR')).toBeNull();
   });
@@ -94,7 +94,7 @@ describe('dayTotalCost', () => {
     const assignments = {
       '2': [
         { id: 3, day_id: 2, order_index: 0, notes: null, place: { id: 3, trip_id: 1, name: 'C', lat: null, lng: null, description: null, address: null, category_id: null, icon: null, price: '10', image_url: null, google_place_id: null, osm_id: null, route_geometry: null, place_time: null, end_time: null, created_at: '' } },
-      ],
+      ] as any,
     };
     expect(dayTotalCost(1, assignments, 'USD')).toBeNull();
     expect(dayTotalCost(2, assignments, 'USD')).toBe('10 USD');

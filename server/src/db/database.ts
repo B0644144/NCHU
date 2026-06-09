@@ -108,6 +108,7 @@ function getPlaceWithTags(placeId: number | string): PlaceWithTags | null {
       icon: place.category_icon!,
     } : null,
     tags,
+    properties: place.properties ? (typeof place.properties === 'string' ? JSON.parse(place.properties) : place.properties) : undefined,
   };
 }
 

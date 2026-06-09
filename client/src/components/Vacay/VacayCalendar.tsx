@@ -36,13 +36,13 @@ export default function VacayCalendar() {
   }, [selectedYear])
 
   const companyHolidaySet = useMemo(() => {
-    const s = new Set()
-    companyHolidays.forEach(h => s.add(h.date))
+    const s = new Set<string>()
+    companyHolidays.forEach((h: any) => s.add(h.date || h))
     return s
   }, [companyHolidays])
 
   const entryMap = useMemo(() => {
-    const map = {}
+    const map: Record<string, any[]> = {}
     entries.forEach(e => {
       if (!map[e.date]) map[e.date] = []
       map[e.date].push(e)

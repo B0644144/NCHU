@@ -2265,6 +2265,28 @@ function runMigrations(db: Database.Database): void {
         if (!err.message?.includes('no such table')) throw err;
       }
     },
+    // V13 Multi-Currency Support for Budget
+    () => {
+      try { db.exec('ALTER TABLE budget_items ADD COLUMN currency TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try { db.exec('ALTER TABLE budget_items ADD COLUMN original_amount REAL'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try { db.exec('ALTER TABLE budget_items ADD COLUMN exchange_rate REAL DEFAULT 1.0'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+    },
+    // V15 Auto-Shift Itinerary Times
+    () => {
+      try { db.exec('ALTER TABLE places ADD COLUMN time_locked INTEGER DEFAULT 0'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+    },
+    // V16 Day Note Custom Icons & Categorization
+    () => {
+      try { db.exec("ALTER TABLE day_notes ADD COLUMN category TEXT DEFAULT 'general'"); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+    },
+    // V17 Notion-like Custom Properties
+    () => {
+      try { db.exec("ALTER TABLE places ADD COLUMN properties TEXT DEFAULT '{}'"); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try { db.exec("ALTER TABLE packing_items ADD COLUMN properties TEXT DEFAULT '{}'"); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try { db.exec("ALTER TABLE todo_items ADD COLUMN properties TEXT DEFAULT '{}'"); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try { db.exec("ALTER TABLE budget_items ADD COLUMN properties TEXT DEFAULT '{}'"); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try { db.exec("ALTER TABLE reservations ADD COLUMN properties TEXT DEFAULT '{}'"); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+    },
   ];
 
   if (currentVersion < migrations.length) {

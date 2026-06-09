@@ -28,20 +28,29 @@ const glMap = vi.hoisted(() => ({
   getCanvasContainer: vi.fn(() => document.createElement('div')),
 }))
 
-vi.mock('mapbox-gl', () => ({
-  default: {
-    accessToken: '',
-    Map: vi.fn(() => glMap),
-    Marker: vi.fn(() => ({
-      setLngLat: vi.fn().mockReturnThis(),
-      addTo: vi.fn().mockReturnThis(),
-      remove: vi.fn(),
-      getElement: vi.fn(() => document.createElement('div')),
-    })),
-    LngLatBounds: vi.fn(() => ({ extend: vi.fn().mockReturnThis() })),
-    NavigationControl: vi.fn(),
-  },
-}))
+vi.mock('mapbox-gl', () => {
+  const MapMock = vi.fn().mockImplementation(function () {
+    return glMap
+  })
+  return {
+    default: {
+      accessToken: '',
+      Map: MapMock,
+      Marker: vi.fn().mockImplementation(function () {
+        return {
+          setLngLat: vi.fn().mockReturnThis(),
+          addTo: vi.fn().mockReturnThis(),
+          remove: vi.fn(),
+          getElement: vi.fn(() => document.createElement('div')),
+        }
+      }),
+      LngLatBounds: vi.fn().mockImplementation(function () {
+        return { extend: vi.fn().mockReturnThis() }
+      }),
+      NavigationControl: vi.fn().mockImplementation(function () { return {} }),
+    },
+  }
+})
 vi.mock('mapbox-gl/dist/mapbox-gl.css', () => ({}))
 
 vi.mock('./mapboxSetup', () => ({

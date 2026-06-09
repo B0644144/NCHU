@@ -10,6 +10,8 @@ import Navbar from '../components/Layout/Navbar'
 import DemoBanner from '../components/Layout/DemoBanner'
 import CurrencyWidget from '../components/Dashboard/CurrencyWidget'
 import TimezoneWidget from '../components/Dashboard/TimezoneWidget'
+import WeatherWidget from '../components/Dashboard/WeatherWidget'
+import DashboardStats from '../components/Dashboard/DashboardStats'
 import TripFormModal from '../components/Trips/TripFormModal'
 import ConfirmDialog from '../components/shared/ConfirmDialog'
 import CopyTripDialog from '../components/shared/CopyTripDialog'
@@ -18,7 +20,7 @@ import { useCountUp } from '../hooks/useCountUp'
 import {
   Plus, Calendar, Trash2, Edit2, Map, ChevronDown, ChevronUp,
   Archive, ArchiveRestore, Clock, MapPin, Settings, X, ArrowRightLeft, Users,
-  LayoutGrid, List, Copy, Bell, CheckCircle2,
+  LayoutGrid, List, Copy, Bell, CheckCircle2, Sun,
 } from 'lucide-react'
 import { useCanDo } from '../store/permissionsStore'
 
@@ -46,7 +48,7 @@ function daysUntil(dateStr: string | null | undefined): number | null {
   if (!dateStr) return null
   const today = new Date(); today.setHours(0, 0, 0, 0)
   const d = new Date(dateStr + 'T00:00:00'); d.setHours(0, 0, 0, 0)
-  return Math.round((d - today) / MS_PER_DAY)
+  return Math.round((d.getTime() - today.getTime()) / MS_PER_DAY)
 }
 
 function getTripStatus(trip: DashboardTrip): string | null {
@@ -122,7 +124,7 @@ function LiquidGlass({ children, dark, style, className = '', onClick }: LiquidG
     glareRef.current.style.opacity = '1'
     borderRef.current.style.opacity = '1'
     borderRef.current.style.maskImage = `radial-gradient(circle 120px at ${x}px ${y}px, black 0%, transparent 100%)`
-    borderRef.current.style.WebkitMaskImage = `radial-gradient(circle 120px at ${x}px ${y}px, black 0%, transparent 100%)`
+    borderRef.current.style.webkitMaskImage = `radial-gradient(circle 120px at ${x}px ${y}px, black 0%, transparent 100%)`
   }
   const onLeave = () => {
     if (glareRef.current) glareRef.current.style.opacity = '0'
@@ -207,7 +209,7 @@ function SpotlightCard({ trip, onEdit, onCopy, onDelete, onArchive, onClick, t, 
         {trip.cover_image && (
           <>
             <img src={trip.cover_image} className="w-full h-full object-cover transition-transform duration-[1200ms] ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:scale-[1.06]" alt="" />
-            <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.6) 100%)' }} />
+            <div className="absolute inset-x-0 bottom-0 h-4 md:h-6 pointer-events-none z-10" style={{ background: 'inherit', WebkitMaskImage: 'linear-gradient(to top, black, transparent)', maskImage: 'linear-gradient(to top, black, transparent)' }} />
           </>
         )}
       </div>
@@ -388,7 +390,7 @@ function TripCard({ trip, onEdit, onCopy, onDelete, onArchive, onClick, t, local
   return (
     <div
       onClick={() => onClick(trip)}
-      className="group rounded-2xl border border-zinc-200 dark:border-zinc-700 overflow-hidden cursor-pointer transition-[transform,box-shadow,border-color] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 hover:shadow-lg hover:border-zinc-300 dark:hover:border-zinc-600"
+      className="group rounded-2xl border border-zinc-200 dark:border-zinc-700 overflow-hidden cursor-pointer transition-[transform,box-shadow,border-color] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 hover:shadow-lg hover:border-zinc-300 dark:hover:border-zinc-600 trek-premium-card"
       style={{ background: 'var(--bg-card)', isolation: 'isolate' }}
     >
       {/* Cover */}
@@ -697,7 +699,7 @@ export default function DashboardPage(): React.ReactElement {
   const [showForm, setShowForm] = useState<boolean>(false)
   const [editingTrip, setEditingTrip] = useState<DashboardTrip | null>(null)
   const [showArchived, setShowArchived] = useState<boolean>(false)
-  const [showWidgetSettings, setShowWidgetSettings] = useState<boolean | 'mobile' | 'mobile-currency' | 'mobile-timezone'>(false)
+  const [showWidgetSettings, setShowWidgetSettings] = useState<boolean | 'mobile' | 'mobile-currency' | 'mobile-timezone' | 'mobile-weather'>(false)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => (localStorage.getItem('trek_dashboard_view') as 'grid' | 'list') || 'grid')
   const [deleteTrip, setDeleteTrip] = useState<DashboardTrip | null>(null)
   const [copyTrip, setCopyTrip] = useState<DashboardTrip | null>(null)
@@ -719,12 +721,12 @@ export default function DashboardPage(): React.ReactElement {
   const can = useCanDo()
   const dm = settings.dark_mode
   const dark = dm === true || dm === 'dark' || (dm === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-  const showCurrency = settings.dashboard_currency !== 'off'
-  const showTimezone = settings.dashboard_timezone !== 'off'
+  const showCurrency = (settings as any).dashboard_currency !== 'off'
+  const showTimezone = (settings as any).dashboard_timezone !== 'off'
   const showSidebar = showCurrency || showTimezone
 
   useEffect(() => {
-    if (showWidgetSettings === 'mobile' || showWidgetSettings === 'mobile-currency' || showWidgetSettings === 'mobile-timezone') {
+    if (showWidgetSettings === 'mobile' || showWidgetSettings === 'mobile-currency' || showWidgetSettings === 'mobile-timezone' || showWidgetSettings === 'mobile-weather') {
       document.body.style.overflow = 'hidden'
     } else {
       document.body.style.overflow = ''
@@ -745,8 +747,8 @@ export default function DashboardPage(): React.ReactElement {
     setIsLoading(true)
     try {
       const { trips, archivedTrips } = await tripRepo.list()
-      setTrips(sortTrips(trips))
-      setArchivedTrips(sortTrips(archivedTrips))
+      setTrips(sortTrips(trips as unknown as DashboardTrip[]))
+      setArchivedTrips(sortTrips(archivedTrips as unknown as DashboardTrip[]))
     } catch {
       toast.error(t('dashboard.toast.loadError'))
     } finally {
@@ -754,7 +756,7 @@ export default function DashboardPage(): React.ReactElement {
     }
   }
 
-  const handleCreate = async (tripData) => {
+  const handleCreate = async (tripData: any) => {
     try {
       const data = await tripsApi.create(tripData)
       setTrips(prev => sortTrips([data.trip, ...prev]))
@@ -765,17 +767,17 @@ export default function DashboardPage(): React.ReactElement {
     }
   }
 
-  const handleUpdate = async (tripData) => {
+  const handleUpdate = async (tripData: any) => {
     try {
-      const data = await tripsApi.update(editingTrip.id, tripData)
-      setTrips(prev => sortTrips(prev.map(t => t.id === editingTrip.id ? data.trip : t)))
+      const data = await tripsApi.update(editingTrip!.id, tripData)
+      setTrips(prev => sortTrips(prev.map(t => t.id === editingTrip!.id ? data.trip : t)))
       toast.success(t('dashboard.toast.updated'))
     } catch (err: unknown) {
       throw new Error(getApiErrorMessage(err, t('dashboard.toast.updateError')))
     }
   }
 
-  const handleDelete = (trip) => setDeleteTrip(trip)
+  const handleDelete = (trip: DashboardTrip) => setDeleteTrip(trip)
   const confirmDelete = async () => {
     if (!deleteTrip) return
     try {
@@ -789,7 +791,7 @@ export default function DashboardPage(): React.ReactElement {
     setDeleteTrip(null)
   }
 
-  const handleArchive = async (id) => {
+  const handleArchive = async (id: number) => {
     try {
       const data = await tripsApi.archive(id)
       setTrips(prev => prev.filter(t => t.id !== id))
@@ -800,7 +802,7 @@ export default function DashboardPage(): React.ReactElement {
     }
   }
 
-  const handleUnarchive = async (id) => {
+  const handleUnarchive = async (id: number) => {
     try {
       const data = await tripsApi.unarchive(id)
       setArchivedTrips(prev => prev.filter(t => t.id !== id))
@@ -887,6 +889,11 @@ export default function DashboardPage(): React.ReactElement {
             </div>
           )}
 
+          {/* Stats Overview */}
+          {!isLoading && trips.length > 0 && (
+            <DashboardStats trips={trips} archivedTrips={archivedTrips} />
+          )}
+
           {/* Mobile: Quick Actions */}
           <div className="md:hidden grid grid-cols-3 gap-2 mb-6">
             {can('trip_create') && (
@@ -920,6 +927,16 @@ export default function DashboardPage(): React.ReactElement {
                 <Clock size={16} />
               </div>
               <span className="text-[10px] font-semibold" style={{ color: 'var(--text-primary)' }}>{t('dashboard.mobile.timezone')}</span>
+            </button>
+            <button
+              onClick={() => setShowWidgetSettings('mobile-weather')}
+              className="flex flex-col items-center gap-2 py-3.5 rounded-2xl border border-zinc-200 dark:border-zinc-700"
+              style={{ background: 'var(--bg-card)' }}
+            >
+              <div className="w-9 h-9 rounded-[11px] flex items-center justify-center" style={{ background: '#FEF08A', color: '#CA8A04' }}>
+                <Sun size={16} />
+              </div>
+              <span className="text-[10px] font-semibold" style={{ color: 'var(--text-primary)' }}>{t('dashboard.weather') || 'Weather'}</span>
             </button>
           </div>
 
@@ -999,7 +1016,7 @@ export default function DashboardPage(): React.ReactElement {
             <div className="rounded-xl border p-3 mb-4 flex items-center gap-4" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-primary)' }}>
               <span className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>Widgets:</span>
               <label className="flex items-center gap-2 cursor-pointer">
-                <button onClick={() => updateSetting('dashboard_currency', showCurrency ? 'off' : 'on')}
+                <button onClick={() => updateSetting('dashboard_currency' as any, showCurrency ? 'off' : 'on')}
                   className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
                   style={{ background: showCurrency ? 'var(--text-primary)' : 'var(--border-primary)' }}>
                   <span className="absolute left-0.5 h-4 w-4 rounded-full transition-transform duration-200"
@@ -1008,7 +1025,7 @@ export default function DashboardPage(): React.ReactElement {
                 <span className="text-xs" style={{ color: 'var(--text-primary)' }}>{t('dashboard.currency')}</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
-                <button onClick={() => updateSetting('dashboard_timezone', showTimezone ? 'off' : 'on')}
+                <button onClick={() => updateSetting('dashboard_timezone' as any, showTimezone ? 'off' : 'on')}
                   className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
                   style={{ background: showTimezone ? 'var(--text-primary)' : 'var(--border-primary)' }}>
                   <span className="absolute left-0.5 h-4 w-4 rounded-full transition-transform duration-200"
@@ -1018,8 +1035,6 @@ export default function DashboardPage(): React.ReactElement {
               </label>
             </div>
           )}
-
-          {/* Mobile widgets button — replaced by Quick Actions */}
 
           <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
           {/* Main content */}
@@ -1164,6 +1179,7 @@ export default function DashboardPage(): React.ReactElement {
             <div className="hidden lg:flex flex-col gap-4" style={{ position: 'sticky', top: 80, flexShrink: 0, width: 280 }}>
               {showCurrency && <LiquidGlass dark={dark} style={{ borderRadius: 16 }}><CurrencyWidget /></LiquidGlass>}
               {showTimezone && <LiquidGlass dark={dark} style={{ borderRadius: 16 }}><TimezoneWidget /></LiquidGlass>}
+              <LiquidGlass dark={dark} style={{ borderRadius: 16 }}><WeatherWidget /></LiquidGlass>
             </div>
           )}
           </div>
@@ -1171,7 +1187,7 @@ export default function DashboardPage(): React.ReactElement {
       </div>
 
       {/* Mobile widgets bottom sheet */}
-      {(showWidgetSettings === 'mobile' || showWidgetSettings === 'mobile-currency' || showWidgetSettings === 'mobile-timezone') && (
+      {(showWidgetSettings === 'mobile' || showWidgetSettings === 'mobile-currency' || showWidgetSettings === 'mobile-timezone' || showWidgetSettings === 'mobile-weather') && (
         <div className="lg:hidden fixed inset-0 z-50" style={{ background: 'rgba(0,0,0,0.3)', touchAction: 'none' }} onClick={() => setShowWidgetSettings(false)}>
           <div className="absolute left-0 right-0 flex flex-col overflow-hidden"
             style={{ bottom: 'calc(84px + env(safe-area-inset-bottom, 0px))', maxHeight: '70vh', background: 'var(--bg-card)', borderRadius: '20px 20px 0 0', overscrollBehavior: 'contain', animation: 'slideUp 0.25s ease-out' }}
@@ -1181,7 +1197,7 @@ export default function DashboardPage(): React.ReactElement {
             </div>
             <div className="flex items-center justify-between px-5 pb-3">
               <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                {showWidgetSettings === 'mobile-currency' ? t('dashboard.mobile.currencyConverter') : showWidgetSettings === 'mobile-timezone' ? t('dashboard.mobile.timezone') : t('common.settings')}
+                {showWidgetSettings === 'mobile-currency' ? t('dashboard.mobile.currencyConverter') : showWidgetSettings === 'mobile-timezone' ? t('dashboard.mobile.timezone') : showWidgetSettings === 'mobile-weather' ? (t('dashboard.weather') || 'Weather') : t('common.settings')}
               </span>
               <button onClick={() => setShowWidgetSettings(false)} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: 'var(--bg-secondary)' }}>
                 <X size={14} style={{ color: 'var(--text-primary)' }} />
@@ -1190,6 +1206,7 @@ export default function DashboardPage(): React.ReactElement {
             <div className="flex-1 overflow-auto p-4 space-y-4" style={{ borderTop: '1px solid var(--border-secondary)' }}>
               {(showWidgetSettings === 'mobile' || showWidgetSettings === 'mobile-currency') && <CurrencyWidget />}
               {(showWidgetSettings === 'mobile' || showWidgetSettings === 'mobile-timezone') && <TimezoneWidget />}
+              {(showWidgetSettings === 'mobile' || showWidgetSettings === 'mobile-weather') && <WeatherWidget />}
             </div>
           </div>
         </div>
@@ -1199,7 +1216,7 @@ export default function DashboardPage(): React.ReactElement {
         isOpen={showForm}
         onClose={() => { setShowForm(false); setEditingTrip(null) }}
         onSave={editingTrip ? handleUpdate : handleCreate}
-        trip={editingTrip}
+        trip={editingTrip as any}
         onCoverUpdate={handleCoverUpdate}
       />
 

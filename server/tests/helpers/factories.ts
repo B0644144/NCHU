@@ -192,15 +192,17 @@ export interface TestBudgetItem {
 export function createBudgetItem(
   db: Database.Database,
   tripId: number,
-  overrides: Partial<{ name: string; category: string; total_price: number }> = {}
+  overrides: Partial<{ name: string; category: string; total_price: number; note: string | null; expense_date: string | null }> = {}
 ): TestBudgetItem {
   const result = db.prepare(
-    'INSERT INTO budget_items (trip_id, name, category, total_price) VALUES (?, ?, ?, ?)'
+    'INSERT INTO budget_items (trip_id, name, category, total_price, note, expense_date) VALUES (?, ?, ?, ?, ?, ?)'
   ).run(
     tripId,
     overrides.name ?? 'Test Budget Item',
     overrides.category ?? 'Transport',
-    overrides.total_price ?? 100
+    overrides.total_price ?? 100,
+    overrides.note ?? null,
+    overrides.expense_date ?? null
   );
   return db.prepare('SELECT * FROM budget_items WHERE id = ?').get(result.lastInsertRowid) as TestBudgetItem;
 }

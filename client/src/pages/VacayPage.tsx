@@ -262,18 +262,18 @@ export default function VacayPage(): React.ReactElement {
         <div className="fixed inset-0 flex items-center justify-center px-4"
           style={{ zIndex: 99995, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}>
           {incomingInvites.map(inv => (
-            <div key={inv.id} className="trek-modal-enter w-full max-w-md rounded-2xl shadow-2xl overflow-hidden"
+            <div key={inv.plan_id} className="trek-modal-enter w-full max-w-md rounded-2xl shadow-2xl overflow-hidden"
               style={{ background: 'var(--bg-card)' }}>
               <div className="px-6 pt-6 pb-4 text-center">
                 <div className="w-14 h-14 rounded-full mx-auto mb-4 flex items-center justify-center text-lg font-bold"
                   style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
-                  {inv.username?.[0]?.toUpperCase()}
+                  {inv.owner_username?.[0]?.toUpperCase()}
                 </div>
                 <h2 className="text-lg font-bold mb-1" style={{ color: 'var(--text-primary)' }}>
                   {t('vacay.inviteTitle')}
                 </h2>
                 <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                  <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>{inv.username}</span> {t('vacay.inviteWantsToFuse')}
+                  <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>{inv.owner_username}</span> {t('vacay.inviteWantsToFuse')}
                 </p>
               </div>
               <div className="px-6 pb-4 space-y-2">
@@ -311,7 +311,7 @@ export default function VacayPage(): React.ReactElement {
   )
 }
 
-function InfoItem({ icon: Icon, text }: { icon: React.ComponentType<{ size?: number; className?: string; style?: React.CSSProperties }>; text: string }): React.ReactElement {
+function InfoItem({ icon: Icon, text }: { icon: any; text: string }): React.ReactElement {
   return (
     <div className="flex items-start gap-3 px-3 py-2 rounded-lg" style={{ background: 'var(--bg-secondary)' }}>
       <Icon size={15} className="shrink-0 mt-0.5" style={{ color: 'var(--text-muted)' }} />

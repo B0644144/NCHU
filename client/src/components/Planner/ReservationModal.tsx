@@ -10,6 +10,7 @@ import { useToast } from '../shared/Toast'
 import { useTranslation } from '../../i18n'
 import { CustomDatePicker } from '../shared/CustomDateTimePicker'
 import CustomTimePicker from '../shared/CustomTimePicker'
+import PropertiesEditor from '../shared/PropertiesEditor'
 import { openFile } from '../../utils/fileDownload'
 import type { Day, Place, Reservation, TripFile, AssignmentsMap, Accommodation } from '../../types'
 
@@ -49,7 +50,7 @@ function buildAssignmentOptions(days, assignments, t, locale) {
 interface ReservationModalProps {
   isOpen: boolean
   onClose: () => void
-  onSave: (data: Record<string, string | number | null>) => Promise<void> | void
+  onSave: (data: Record<string, any>) => Promise<any> | any
   reservation: Reservation | null
   days: Day[]
   places: Place[]
@@ -80,10 +81,11 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
   const [form, setForm] = useState({
     title: '', type: 'other', status: 'pending',
     reservation_time: '', reservation_end_time: '', end_date: '', location: '', confirmation_number: '',
-    notes: '', assignment_id: '' as string | number, accommodation_id: '' as string | number,
+    notes: '', assignment_id: '' as string, accommodation_id: '' as string,
     price: '', budget_category: '',
     meta_check_in_time: '', meta_check_in_end_time: '', meta_check_out_time: '',
-    hotel_place_id: '' as string | number, hotel_start_day: '' as string | number, hotel_end_day: '' as string | number,
+    hotel_place_id: '' as string, hotel_start_day: '' as string, hotel_end_day: '' as string,
+    properties: {} as Record<string, any>,
   })
   const [isSaving, setIsSaving] = useState(false)
   const [uploadingFile, setUploadingFile] = useState(false)
@@ -119,25 +121,27 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
         location: reservation.location || '',
         confirmation_number: reservation.confirmation_number || '',
         notes: reservation.notes || '',
-        assignment_id: reservation.assignment_id || '',
-        accommodation_id: reservation.accommodation_id || '',
+        assignment_id: String(reservation.assignment_id || ''),
+        accommodation_id: String(reservation.accommodation_id || ''),
         meta_check_in_time: meta.check_in_time || '',
         meta_check_in_end_time: meta.check_in_end_time || '',
         meta_check_out_time: meta.check_out_time || '',
-        hotel_place_id: (() => { const acc = accommodations.find(a => a.id == reservation.accommodation_id); return acc?.place_id || '' })(),
-        hotel_start_day: (() => { const acc = accommodations.find(a => a.id == reservation.accommodation_id); return acc?.start_day_id || '' })(),
-        hotel_end_day: (() => { const acc = accommodations.find(a => a.id == reservation.accommodation_id); return acc?.end_day_id || '' })(),
+        hotel_place_id: (() => { const acc = accommodations.find(a => a.id == reservation.accommodation_id); return String(acc?.place_id || '') })(),
+        hotel_start_day: (() => { const acc = accommodations.find(a => a.id == reservation.accommodation_id); return String(acc?.start_day_id || '') })(),
+        hotel_end_day: (() => { const acc = accommodations.find(a => a.id == reservation.accommodation_id); return String(acc?.end_day_id || '') })(),
         price: meta.price || '',
         budget_category: (meta.budget_category && budgetItems.some(i => i.category === meta.budget_category)) ? meta.budget_category : '',
+        properties: reservation.properties || {},
       })
     } else {
       setForm({
         title: '', type: 'other', status: 'pending',
         reservation_time: '', reservation_end_time: '', end_date: '', location: '', confirmation_number: '',
-        notes: '', assignment_id: defaultAssignmentId ?? '', accommodation_id: '',
+        notes: '', assignment_id: defaultAssignmentId !== null ? String(defaultAssignmentId) : '', accommodation_id: '',
         price: '', budget_category: '',
         meta_check_in_time: '', meta_check_in_end_time: '', meta_check_out_time: '',
         hotel_place_id: '', hotel_start_day: '', hotel_end_day: '',
+        properties: {},
       })
       setPendingFiles([])
     }
@@ -151,7 +155,7 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
     if (!acc) return
     setForm(prev => {
       if (prev.hotel_place_id !== '' || prev.hotel_start_day !== '' || prev.hotel_end_day !== '') return prev
-      return { ...prev, hotel_place_id: acc.place_id, hotel_start_day: acc.start_day_id, hotel_end_day: acc.end_day_id }
+      return { ...prev, hotel_place_id: String(acc.place_id), hotel_start_day: String(acc.start_day_id), hotel_end_day: String(acc.end_day_id) }
     })
   }, [accommodations, isOpen, reservation])
 
@@ -199,6 +203,7 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
         assignment_id: (form.type === 'hotel' && !form.accommodation_id) ? null : (form.assignment_id || null),
         accommodation_id: form.type === 'hotel' ? (form.accommodation_id || null) : null,
         metadata: Object.keys(metadata).length > 0 ? metadata : null,
+        properties: form.properties,
         endpoints: [],
         needs_review: false,
       }
@@ -209,9 +214,9 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
       }
       if (form.type === 'hotel' && form.hotel_start_day && form.hotel_end_day) {
         saveData.create_accommodation = {
-          place_id: form.hotel_place_id || null,
-          start_day_id: form.hotel_start_day,
-          end_day_id: form.hotel_end_day,
+          place_id: form.hotel_place_id ? Number(form.hotel_place_id) : null,
+          start_day_id: Number(form.hotel_start_day),
+          end_day_id: Number(form.hotel_end_day),
           check_in: form.meta_check_in_time || null,
           check_in_end: form.meta_check_in_end_time || null,
           check_out: form.meta_check_out_time || null,
@@ -241,7 +246,7 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
       try {
         const fd = new FormData()
         fd.append('file', file)
-        fd.append('reservation_id', reservation.id)
+        fd.append('reservation_id', String(reservation.id))
         fd.append('description', reservation.title)
         await onFileUpload(fd)
         toast.success(t('reservations.toast.fileUploaded'))
@@ -268,7 +273,7 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
   const inputStyle = {
     width: '100%', border: '1px solid var(--border-primary)', borderRadius: 10,
     padding: '8px 12px', fontSize: 13, fontFamily: 'inherit',
-    outline: 'none', boxSizing: 'border-box', color: 'var(--text-primary)', background: 'var(--bg-input)',
+    outline: 'none', boxSizing: 'border-box' as const, color: 'var(--text-primary)', background: 'var(--bg-input)',
   }
   const labelStyle = { display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-faint)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.03em' }
 
@@ -434,7 +439,7 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
                 <CustomSelect
                   value={form.hotel_place_id}
                   onChange={value => {
-                    const p = places.find(pl => pl.id === value)
+                    const p = places.find(pl => String(pl.id) === String(value))
                     setForm(prev => {
                       const next = { ...prev, hotel_place_id: value }
                       if (!value) {
@@ -449,7 +454,7 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
                   placeholder={t('reservations.meta.pickHotel')}
                   options={[
                     { value: '', label: '—' },
-                    ...places.map(p => ({ value: p.id, label: p.name })),
+                    ...places.map(p => ({ value: String(p.id), label: p.name })),
                   ]}
                   searchable
                   size="sm"
@@ -462,7 +467,7 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
                   onChange={value => setForm(prev => ({
                     ...prev,
                     hotel_start_day: value,
-                    hotel_end_day: days.findIndex(d => d.id === value) > days.findIndex(d => d.id === prev.hotel_end_day)
+                    hotel_end_day: days.findIndex(d => String(d.id) === String(value)) > days.findIndex(d => String(d.id) === String(prev.hotel_end_day))
                       ? value : prev.hotel_end_day,
                   }))}
                   placeholder={t('reservations.meta.selectDay')}
@@ -470,7 +475,7 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
                     const dateBadge = d.date ? (formatDate(d.date, locale) ?? undefined) : undefined
                     const dayBadge = d.title ? t('dayplan.dayN', { n: d.day_number }) : undefined
                     return {
-                      value: d.id,
+                      value: String(d.id),
                       label: d.title || t('dayplan.dayN', { n: d.day_number }),
                       badge: dateBadge ?? dayBadge,
                     }
@@ -484,7 +489,7 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
                   value={form.hotel_end_day}
                   onChange={value => setForm(prev => ({
                     ...prev,
-                    hotel_start_day: days.findIndex(d => d.id === value) < days.findIndex(d => d.id === prev.hotel_start_day)
+                    hotel_start_day: days.findIndex(d => String(d.id) === String(value)) < days.findIndex(d => String(d.id) === String(prev.hotel_start_day))
                       ? value : prev.hotel_start_day,
                     hotel_end_day: value,
                   }))}
@@ -493,7 +498,7 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
                     const dateBadge = d.date ? (formatDate(d.date, locale) ?? undefined) : undefined
                     const dayBadge = d.title ? t('dayplan.dayN', { n: d.day_number }) : undefined
                     return {
-                      value: d.id,
+                      value: String(d.id),
                       label: d.title || t('dayplan.dayN', { n: d.day_number }),
                       badge: dateBadge ?? dayBadge,
                     }
@@ -524,7 +529,7 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
           <label style={labelStyle}>{t('reservations.notes')}</label>
           <textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={2}
             placeholder={t('reservations.notesPlaceholder')}
-            style={{ ...inputStyle, resize: 'none', lineHeight: 1.5 }} />
+            style={{ ...inputStyle, resize: 'none', lineHeight: 1.5, boxSizing: 'border-box' }} />
         </div>
 
         {/* Files */}
@@ -648,6 +653,15 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
             )}
           </>
         )}
+
+        {/* Properties */}
+        <div style={{ paddingBottom: 10 }}>
+          <PropertiesEditor
+            properties={form.properties}
+            onChange={(newProps) => set('properties', newProps)}
+            readOnly={false}
+          />
+        </div>
 
       </form>
     </Modal>

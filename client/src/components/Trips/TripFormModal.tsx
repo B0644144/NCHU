@@ -107,21 +107,21 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
         ...(!formData.start_date && !formData.end_date ? { day_count: formData.day_count } : {}),
       })
       // Add selected members for newly created trips
-      if (selectedMembers.length > 0 && result?.trip?.id) {
+      if (selectedMembers.length > 0 && (result as any)?.trip?.id) {
         for (const userId of selectedMembers) {
           const user = allUsers.find(u => u.id === userId)
           if (user) {
-            try { await tripsApi.addMember(result.trip.id, user.username) } catch {}
+            try { await tripsApi.addMember((result as any).trip.id, user.username) } catch {}
           }
         }
       }
       // Upload pending cover for newly created trips
-      if (pendingCoverFile && result?.trip?.id) {
+      if (pendingCoverFile && (result as any)?.trip?.id) {
         try {
           const fd = new FormData()
           fd.append('cover', pendingCoverFile)
-          const data = await tripsApi.uploadCover(result.trip.id, fd)
-          onCoverUpdate?.(result.trip.id, data.cover_image)
+          const data = await tripsApi.uploadCover((result as any).trip.id, fd)
+          onCoverUpdate?.((result as any).trip.id, data.cover_image)
         } catch {
           // Cover upload failed but trip was created
         }
@@ -188,10 +188,10 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
     if (!canUploadCover) return
     const items = e.clipboardData?.items
     if (!items) return
-    for (const item of Array.from(items)) {
+    for (const item of Array.from(items) as DataTransferItem[]) {
       if (item.type.startsWith('image/')) {
         e.preventDefault()
-        const file = item.getAsFile()
+        const file = (item as any).getAsFile()
         if (file) handleCoverSelect(file)
         return
       }
@@ -206,7 +206,7 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
       } else if (prev.start_date) {
         const oldStart = new Date(prev.start_date + 'T00:00:00Z')
         const oldEnd = new Date(prev.end_date + 'T00:00:00Z')
-        const duration = Math.round((oldEnd - oldStart) / 86400000)
+        const duration = Math.round((oldEnd.getTime() - oldStart.getTime()) / 86400000)
         const newEnd = new Date(value + 'T00:00:00Z')
         newEnd.setDate(newEnd.getDate() + duration)
         next.end_date = newEnd.toISOString().split('T')[0]
@@ -440,7 +440,7 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
                   setMemberSelectValue('')
                 }}
                 placeholder={t('dashboard.addMember')}
-                options={allUsers.filter(u => u.id !== currentUser?.id && !selectedMembers.includes(u.id) && !existingMembers.some(m => m.id === u.id)).map(u => ({ value: u.id, label: u.username }))}
+                options={allUsers.filter(u => u.id !== currentUser?.id && !selectedMembers.includes(u.id) && !existingMembers.some(m => m.id === u.id)).map(u => ({ value: String(u.id), label: u.username }))}
                 searchable
                 size="sm"
               />

@@ -250,7 +250,7 @@ export function handleRemoteEvent(set: SetState, get: GetState, event: WebSocket
       case 'assignment:reordered': {
         const dayKey = String(payload.dayId)
         const currentItems = state.assignments[dayKey] || []
-        const orderedIds: number[] = payload.orderedIds || []
+        const orderedIds = (payload.orderedIds as number[]) || []
         const reordered = orderedIds.map((id, idx) => {
           const item = currentItems.find(a => a.id === id)
           return item ? { ...item, order_index: idx } : null
@@ -363,7 +363,7 @@ export function handleRemoteEvent(set: SetState, get: GetState, event: WebSocket
         return {
           budgetItems: state.budgetItems.map(i =>
             i.id === payload.itemId
-              ? { ...i, members: (i.members || []).map(m => m.user_id === payload.userId ? { ...m, paid: payload.paid } : m) }
+              ? { ...i, members: (i.members || []).map(m => m.user_id === payload.userId ? { ...m, paid: payload.paid as boolean } : m) }
               : i
           ),
         }
@@ -374,7 +374,7 @@ export function handleRemoteEvent(set: SetState, get: GetState, event: WebSocket
           const reordered = orderedIds.map((id, idx) => {
             const item = byId.get(id)
             return item ? { ...item, sort_order: idx } : null
-          }).filter((i): i is BudgetItem => i !== null)
+          }).filter(i => i !== null) as BudgetItem[]
           const remaining = state.budgetItems.filter(i => !orderedIds.includes(i.id))
           return { budgetItems: [...reordered, ...remaining] }
         }

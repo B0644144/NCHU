@@ -12,7 +12,11 @@ import { formatDate as fmtDate } from '../../utils/formatters'
 import {
   CheckSquare, Square, Plus, ChevronRight, Flag,
   X, Check, Calendar, User, FolderPlus, AlertCircle, ListChecks, Inbox, CheckCheck, Trash2,
+  MoreHorizontal, Copy
 } from 'lucide-react'
+import EditableText from '../shared/EditableText'
+import { ContextMenu, useContextMenu } from '../shared/ContextMenu'
+import PropertiesEditor from '../shared/PropertiesEditor'
 import type { TodoItem } from '../../types'
 
 const KAT_COLORS = [
@@ -40,7 +44,7 @@ interface Member { id: number; username: string; avatar: string | null }
 
 export default function TodoListPanel({ tripId, items, addItemSignal = 0 }: { tripId: number; items: TodoItem[]; addItemSignal?: number }) {
   const { addTodoItem, updateTodoItem, deleteTodoItem, toggleTodoItem } = useTripStore()
-  const canEdit = useCanDo('packing_edit')
+  const canEdit = useCanDo()('packing_edit')
   const toast = useToast()
   const { t, locale } = useTranslation()
   const formatDate = (d: string) => fmtDate(d, locale) || d
@@ -68,8 +72,16 @@ export default function TodoListPanel({ tripId, items, addItemSignal = 0 }: { tr
   const [sortByPrio, setSortByPrio] = useState(false)
   const [addingCategory, setAddingCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
+  const { menu, open: openMenu, close: closeMenu } = useContextMenu()
+  const [hoveredId, setHoveredId] = useState<number | null>(null)
+  const [quickAddName, setQuickAddName] = useState('')
   const [members, setMembers] = useState<Member[]>([])
   const [currentUserId, setCurrentUserId] = useState<number | null>(null)
+
+  const [priorityFilter, setPriorityFilter] = useState<string>('')
+  const [assigneeFilter, setAssigneeFilter] = useState<string>('')
+  const [categoryFilter, setCategoryFilter] = useState<string>('')
+  const [sortOption, setSortOption] = useState<string>('')
 
   useEffect(() => {
     apiClient.get(`/trips/${tripId}/members`).then(r => {
@@ -96,13 +108,60 @@ export default function TodoListPanel({ tripId, items, addItemSignal = 0 }: { tr
     else if (filter === 'my') result = items.filter(i => !i.checked && i.assigned_user_id === currentUserId)
     else if (filter === 'overdue') result = items.filter(i => !i.checked && i.due_date && i.due_date < today)
     else result = items.filter(i => i.category === filter)
-    if (sortByPrio) result = [...result].sort((a, b) => {
-      const ap = a.priority || 99
-      const bp = b.priority || 99
-      return ap - bp
-    })
+
+    // Priority filter
+    if (priorityFilter) {
+      if (priorityFilter === 'none') {
+        result = result.filter(i => !i.priority || i.priority === 0)
+      } else {
+        result = result.filter(i => i.priority === Number(priorityFilter))
+      }
+    }
+
+    // Assignee filter
+    if (assigneeFilter) {
+      if (assigneeFilter === 'unassigned') {
+        result = result.filter(i => !i.assigned_user_id)
+      } else {
+        result = result.filter(i => String(i.assigned_user_id) === assigneeFilter)
+      }
+    }
+
+    // Category filter
+    if (categoryFilter) {
+      if (categoryFilter === 'none') {
+        result = result.filter(i => !i.category)
+      } else {
+        result = result.filter(i => i.category === categoryFilter)
+      }
+    }
+
+    // Sorting logic
+    const activeSort = sortOption || (sortByPrio ? 'priority-asc' : '')
+    if (activeSort === 'priority-asc') {
+      result = [...result].sort((a, b) => {
+        const ap = a.priority || 99
+        const bp = b.priority || 99
+        return ap - bp
+      })
+    } else if (activeSort === 'priority-desc') {
+      result = [...result].sort((a, b) => {
+        const ap = a.priority || 0
+        const bp = b.priority || 0
+        if (ap === 0 && bp !== 0) return 1
+        if (bp === 0 && ap !== 0) return -1
+        return bp - ap
+      })
+    } else if (activeSort === 'due-date') {
+      result = [...result].sort((a, b) => {
+        const ad = a.due_date || '9999-12-31'
+        const bd = b.due_date || '9999-12-31'
+        return ad.localeCompare(bd)
+      })
+    }
+
     return result
-  }, [items, filter, currentUserId, today, sortByPrio])
+  }, [items, filter, currentUserId, today, sortByPrio, priorityFilter, assigneeFilter, categoryFilter, sortOption])
 
   const selectedItem = items.find(i => i.id === selectedId) || null
   const totalCount = items.length
@@ -206,7 +265,11 @@ export default function TodoListPanel({ tripId, items, addItemSignal = 0 }: { tr
         {!isMobile && <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-faint)', padding: '16px 12px 4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           {t('todo.sidebar.sortBy')}
         </div>}
-        <button onClick={() => setSortByPrio(v => !v)}
+        <button onClick={() => {
+          const nextVal = !sortByPrio
+          setSortByPrio(nextVal)
+          setSortOption(nextVal ? 'priority-asc' : '')
+        }}
           title={isMobile ? t('todo.priority') : undefined}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: isMobile ? 'center' : 'flex-start',
@@ -264,6 +327,101 @@ export default function TodoListPanel({ tripId, items, addItemSignal = 0 }: { tr
           </div>
         </div>
 
+        {/* Toolbar */}
+        <div style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 8,
+          padding: '10px 20px',
+          borderBottom: '1px solid var(--border-faint)',
+          background: 'var(--bg-primary)',
+          alignItems: 'center',
+        }}>
+          {/* Priority Filter */}
+          <div style={{ width: 140, minWidth: 120 }}>
+            <CustomSelect
+              value={priorityFilter}
+              onChange={setPriorityFilter}
+              options={[
+                { value: '', label: t('todo.filter.allPriorities') },
+                { value: 'none', label: t('todo.detail.noPriority'), icon: <Flag size={14} style={{ color: 'var(--text-faint)' }} /> },
+                { value: '1', label: 'P1 (High)', icon: <Flag size={14} style={{ color: '#ef4444' }} /> },
+                { value: '2', label: 'P2 (Medium)', icon: <Flag size={14} style={{ color: '#f59e0b' }} /> },
+                { value: '3', label: 'P3 (Low)', icon: <Flag size={14} style={{ color: '#3b82f6' }} /> },
+              ]}
+              placeholder={t('todo.filter.allPriorities')}
+              size="sm"
+            />
+          </div>
+
+          {/* Assignee Filter */}
+          <div style={{ width: 150, minWidth: 120 }}>
+            <CustomSelect
+              value={assigneeFilter}
+              onChange={setAssigneeFilter}
+              options={[
+                { value: '', label: t('todo.filter.allAssignees') },
+                { value: 'unassigned', label: t('todo.unassigned'), icon: <User size={14} style={{ color: 'var(--text-faint)' }} /> },
+                ...members.map(m => ({
+                  value: String(m.id),
+                  label: m.username,
+                  icon: m.avatar ? (
+                    <img src={`/uploads/avatars/${m.avatar}`} style={{ width: 14, height: 14, borderRadius: '50%', objectFit: 'cover' }} alt="" />
+                  ) : (
+                    <span style={{ width: 14, height: 14, borderRadius: '50%', background: 'var(--border-primary)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, color: 'var(--text-faint)', fontWeight: 600 }}>
+                      {m.username.charAt(0).toUpperCase()}
+                    </span>
+                  ),
+                })),
+              ]}
+              placeholder={t('todo.filter.allAssignees')}
+              size="sm"
+            />
+          </div>
+
+          {/* Category Filter */}
+          <div style={{ width: 150, minWidth: 120 }}>
+            <CustomSelect
+              value={categoryFilter}
+              onChange={setCategoryFilter}
+              options={[
+                { value: '', label: t('todo.filter.allCategories') },
+                { value: 'none', label: t('todo.noCategory') },
+                ...categories.map(c => ({
+                  value: c,
+                  label: c,
+                  icon: <span style={{ width: 8, height: 8, borderRadius: '50%', background: katColor(c, categories), display: 'inline-block' }} />,
+                })),
+              ]}
+              placeholder={t('todo.filter.allCategories')}
+              size="sm"
+            />
+          </div>
+
+          {/* Sort By Dropdown */}
+          <div style={{ width: 160, minWidth: 120, marginLeft: 'auto' }}>
+            <CustomSelect
+              value={sortOption}
+              onChange={(val) => {
+                setSortOption(val);
+                if (val === 'priority-asc') {
+                  setSortByPrio(true);
+                } else {
+                  setSortByPrio(false);
+                }
+              }}
+              options={[
+                { value: '', label: t('todo.sort.noSort') },
+                { value: 'priority-asc', label: t('todo.sort.priorityAsc'), icon: <Flag size={14} style={{ color: 'var(--text-secondary)' }} /> },
+                { value: 'priority-desc', label: t('todo.sort.priorityDesc'), icon: <Flag size={14} style={{ color: 'var(--text-secondary)' }} /> },
+                { value: 'due-date', label: t('todo.sort.dueDate'), icon: <Calendar size={14} style={{ color: 'var(--text-secondary)' }} /> },
+              ]}
+              placeholder={t('todo.sidebar.sortBy')}
+              size="sm"
+            />
+          </div>
+        </div>
+
         {/* Task list */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
           {filtered.length === 0 ? null : (
@@ -283,8 +441,8 @@ export default function TodoListPanel({ tripId, items, addItemSignal = 0 }: { tr
                     background: isSelected ? 'var(--bg-hover)' : 'transparent',
                     transition: 'background 0.1s',
                   }}
-                  onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'rgba(0,0,0,0.02)' }}
-                  onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent' }}>
+                  onMouseEnter={e => { setHoveredId(item.id); if (!isSelected) e.currentTarget.style.background = 'rgba(0,0,0,0.02)' }}
+                  onMouseLeave={e => { setHoveredId(null); if (!isSelected) e.currentTarget.style.background = 'transparent' }}>
 
                   {/* Checkbox */}
                   <button onClick={e => { e.stopPropagation(); canEdit && toggleTodoItem(tripId, item.id, !done) }}
@@ -300,12 +458,23 @@ export default function TodoListPanel({ tripId, items, addItemSignal = 0 }: { tr
                       textDecoration: done ? 'line-through' : 'none', lineHeight: 1.4,
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}>
-                      {item.name}
+                      <EditableText 
+                        value={item.name} 
+                        onChange={(val) => canEdit && updateTodoItem(tripId, item.id, { ...item, name: val } as any)}
+                        disabled={!canEdit}
+                        textStyle={{ display: 'inline-block', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                      />
                     </div>
                     {/* Description preview */}
-                    {item.description && (
+                    {(item.description || isSelected) && (
                       <div style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.4 }}>
-                        {item.description}
+                        <EditableText 
+                          value={item.description || ''} 
+                          placeholder="Add description..."
+                          onChange={(val) => canEdit && updateTodoItem(tripId, item.id, { ...item, description: val } as any)}
+                          disabled={!canEdit}
+                          textStyle={{ display: 'inline-block', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                        />
                       </div>
                     )}
                     {/* Inline badges */}
@@ -365,13 +534,51 @@ export default function TodoListPanel({ tripId, items, addItemSignal = 0 }: { tr
                     )}
                   </div>
 
-                  {/* Chevron */}
-                  <ChevronRight size={16} color="var(--text-faint)" style={{ flexShrink: 0, opacity: 0.4 }} />
+                  {/* Action Menu */}
+                  {hoveredId === item.id ? (
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openMenu(e, [
+                          { label: t('todo.detail.edit'), icon: FolderPlus, onClick: () => setSelectedId(item.id) },
+                          { label: 'Duplicate', icon: Copy, onClick: () => {
+                            addTodoItem(tripId, { ...item, id: undefined, name: item.name + ' (Copy)' } as any)
+                          }},
+                          { divider: true },
+                          { label: t('todo.detail.delete'), icon: Trash2, danger: true, onClick: () => deleteTodoItem(tripId, item.id) }
+                        ])
+                      }}
+                      style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                      <MoreHorizontal size={16} />
+                    </button>
+                  ) : (
+                    <ChevronRight size={16} color="var(--text-faint)" style={{ flexShrink: 0, opacity: 0.4 }} />
+                  )}
                 </div>
               )
             })
           )}
+          
+          {/* Quick Add Row */}
+          {canEdit && (
+            <div style={{ padding: '10px 20px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border-faint)' }}>
+              <Plus size={18} style={{ color: 'var(--border-primary)', flexShrink: 0 }} />
+              <input 
+                value={quickAddName}
+                onChange={e => setQuickAddName(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && quickAddName.trim()) {
+                    addTodoItem(tripId, { name: quickAddName.trim(), category: typeof filter === 'string' && categories.includes(filter) ? filter : undefined } as any)
+                    setQuickAddName('')
+                  }
+                }}
+                placeholder="Click to add row... (Press Enter to save)"
+                style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', fontSize: 14, color: 'var(--text-primary)' }}
+              />
+            </div>
+          )}
         </div>
+        <ContextMenu menu={menu} onClose={closeMenu} />
       </div>
 
       {/* ── Right: Detail Pane ── */}
@@ -446,7 +653,7 @@ function DetailPane({ item, tripId, categories, members, onClose }: {
   onClose: () => void;
 }) {
   const { updateTodoItem, deleteTodoItem } = useTripStore()
-  const canEdit = useCanDo('packing_edit')
+  const canEdit = useCanDo()('packing_edit')
   const toast = useToast()
   const { t } = useTranslation()
 
@@ -456,6 +663,7 @@ function DetailPane({ item, tripId, categories, members, onClose }: {
   const [category, setCategory] = useState(item.category || '')
   const [assignedUserId, setAssignedUserId] = useState<number | null>(item.assigned_user_id)
   const [priority, setPriority] = useState(item.priority || 0)
+  const [properties, setProperties] = useState<Record<string, any>>(item.properties || {})
   const [saving, setSaving] = useState(false)
 
   // Sync when selected item changes
@@ -466,11 +674,13 @@ function DetailPane({ item, tripId, categories, members, onClose }: {
     setCategory(item.category || '')
     setAssignedUserId(item.assigned_user_id)
     setPriority(item.priority || 0)
-  }, [item.id, item.name, item.description, item.due_date, item.category, item.assigned_user_id, item.priority])
+    setProperties(item.properties || {})
+  }, [item.id, item.name, item.description, item.due_date, item.category, item.assigned_user_id, item.priority, JSON.stringify(item.properties)])
 
   const hasChanges = name !== item.name || desc !== (item.description || '') ||
     dueDate !== (item.due_date || '') || category !== (item.category || '') ||
-    assignedUserId !== item.assigned_user_id || priority !== (item.priority || 0)
+    assignedUserId !== item.assigned_user_id || priority !== (item.priority || 0) ||
+    JSON.stringify(properties) !== JSON.stringify(item.properties || {})
 
   const save = async () => {
     if (!name.trim() || !hasChanges) return
@@ -480,6 +690,7 @@ function DetailPane({ item, tripId, categories, members, onClose }: {
         name: name.trim(), description: desc || null,
         due_date: dueDate || null, category: category || null,
         assigned_user_id: assignedUserId, priority,
+        properties
       } as any)
     } catch (err: unknown) { toast.error(err instanceof Error ? err.message : t('common.error')) }
     setSaving(false)
@@ -605,6 +816,18 @@ function DetailPane({ item, tripId, categories, members, onClose }: {
             size="sm"
             disabled={!canEdit}
           />
+        </div>
+
+        {/* Custom Properties */}
+        <div style={{ marginTop: 8 }}>
+          <label style={labelStyle}>Properties</label>
+          <div style={{ marginTop: 4 }}>
+            <PropertiesEditor
+              properties={properties}
+              onChange={(newProps) => setProperties(newProps)}
+              readOnly={!canEdit}
+            />
+          </div>
         </div>
       </div>
 

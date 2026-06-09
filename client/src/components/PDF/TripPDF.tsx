@@ -95,7 +95,7 @@ function dayCost(assignments, dayId, locale) {
 // Pre-fetch Google Place photos for all assigned places
 async function fetchPlacePhotos(assignments) {
   const photoMap = {} // placeId → photoUrl
-  const allPlaces = Object.values(assignments).flatMap(a => a.map(x => x.place)).filter(Boolean)
+  const allPlaces = Object.values(assignments).flatMap((a: any) => a.map((x: any) => x.place)).filter(Boolean)
   const unique = [...new Map(allPlaces.map(p => [p.id, p])).values()]
 
   const toFetch = unique.filter(p => !p.image_url && (p.google_place_id || p.osm_id))
@@ -140,7 +140,7 @@ export async function downloadTripPDF({ trip, days, places, assignments, categor
     Object.values(assignments || {}).flatMap(a => a.map(x => x.place?.id)).filter(Boolean)
   ).size
   const totalCost = Object.values(assignments || {})
-    .flatMap(a => a).reduce((s, a) => s + (parseFloat(a.place?.price) || 0), 0)
+    .flatMap((a: any) => a).reduce((s: number, a: any) => s + (parseFloat(a.place?.price) || 0), 0)
 
   // Span helpers for multi-day transport (mirrors DayPlanSidebar logic)
   const pdfGetDayOrder = (d: Day) => d.day_number
@@ -164,7 +164,7 @@ export async function downloadTripPDF({ trip, days, places, assignments, categor
     if (r.type === 'car') return tr(`reservations.span.${phase === 'start' ? 'pickup' : phase === 'end' ? 'return' : 'active'}`)
     return tr(`reservations.span.${phase === 'start' ? 'start' : phase === 'end' ? 'end' : 'ongoing'}`)
   }
-  const pdfGetTransportForDay = (dayId: number) => (reservations || []).filter(r => {
+  const pdfGetTransportForDay = (dayId: number | string) => (reservations || []).filter(r => {
     if (r.type === 'hotel') return false
     const startId = r.day_id
     const endId = r.end_day_id ?? startId
@@ -182,7 +182,9 @@ export async function downloadTripPDF({ trip, days, places, assignments, categor
   // Build day HTML
   const daysHtml = sorted.map((day, di) => {
     const assigned = assignments[String(day.id)] || []
-    const notes = (dayNotes || []).filter(n => n.day_id === day.id)
+    const notes = Array.isArray(dayNotes)
+      ? dayNotes.filter(n => String(n.day_id) === String(day.id))
+      : (dayNotes?.[String(day.id)] || [])
     const cost = dayCost(assignments, day.id, loc)
 
     // Reservations for this day (hotel rendered via accommodations block; car middle-phase rendered in sidebar header only)
@@ -574,6 +576,6 @@ ${daysHtml}
   overlay.appendChild(card)
   document.body.appendChild(overlay)
 
-  header.querySelector('#pdf-close-btn').onclick = () => overlay.remove()
-  header.querySelector('#pdf-print-btn').onclick = () => { iframe.contentWindow?.print() }
+  ;(header.querySelector('#pdf-close-btn') as HTMLButtonElement).onclick = () => overlay.remove()
+  ;(header.querySelector('#pdf-print-btn') as HTMLButtonElement).onclick = () => { iframe.contentWindow?.print() }
 }

@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-type-assertion */
-interface DragDataPayload { placeId?: string; assignmentId?: string; noteId?: string; reservationId?: string; fromDayId?: string; phase?: 'single' | 'start' | 'middle' | 'end' }
+interface DragDataPayload { placeId?: string; placeIds?: number[]; assignmentId?: string; noteId?: string; reservationId?: string; fromDayId?: string; phase?: 'single' | 'start' | 'middle' | 'end' }
 declare global { interface Window { __dragData: DragDataPayload | null } }
 
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react'
 import ReactDOM from 'react-dom'
-import { ChevronDown, ChevronRight, ChevronUp, ChevronsDownUp, ChevronsUpDown, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Check, Trash2, Info, MapPin, Star, Heart, Camera, Lightbulb, Flag, Bookmark, Train, Bus, Plane, Car, Ship, Coffee, ShoppingBag, AlertTriangle, FileDown, Lock, Hotel, Utensils, Users, Undo2, X, Route as RouteIcon } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronUp, ChevronsDownUp, ChevronsUpDown, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Check, Trash2, Info, MapPin, Star, Heart, Camera, Lightbulb, Flag, Bookmark, Train, Bus, Plane, Car, Ship, Coffee, ShoppingBag, AlertTriangle, FileDown, Lock, Hotel, Utensils, Users, Undo2, X, Route as RouteIcon, Loader2 } from 'lucide-react'
 
 const RES_ICONS = { flight: Plane, hotel: Hotel, restaurant: Utensils, train: Train, car: Car, cruise: Ship, event: Ticket, tour: Users, other: FileText }
 import { assignmentsApi, reservationsApi } from '../../api/client'
@@ -57,6 +57,22 @@ const NOTE_ICONS = [
 ]
 const NOTE_ICON_MAP = Object.fromEntries(NOTE_ICONS.map(({ id, Icon }) => [id, Icon]))
 function getNoteIcon(iconId) { return NOTE_ICON_MAP[iconId] || FileText }
+
+const NOTE_CATEGORIES = [
+  { id: 'general', label: 'General', color: '#64748b' },
+  { id: 'food', label: 'Food', color: '#f97316' },
+  { id: 'logistics', label: 'Logistics', color: '#3b82f6' },
+  { id: 'sights', label: 'Sights', color: '#22c55e' },
+  { id: 'activity', label: 'Activity', color: '#a855f7' },
+]
+
+const NOTE_CATEGORY_STYLES = {
+  general:   { bg: 'var(--bg-hover)', border: 'var(--border-faint)', text: 'var(--text-primary)', iconBg: 'var(--bg-hover)', iconColor: 'var(--text-muted)', defaultIcon: 'FileText' },
+  food:      { bg: 'rgba(249,115,22,0.06)', border: 'rgba(249,115,22,0.15)', text: 'var(--text-primary)', iconBg: 'rgba(249,115,22,0.1)', iconColor: '#f97316', defaultIcon: 'Coffee' },
+  logistics: { bg: 'rgba(59,130,246,0.06)', border: 'rgba(59,130,246,0.15)', text: 'var(--text-primary)', iconBg: 'rgba(59,130,246,0.1)', iconColor: '#3b82f6', defaultIcon: 'Train' },
+  sights:    { bg: 'rgba(34,197,94,0.06)', border: 'rgba(34,197,94,0.15)', text: 'var(--text-primary)', iconBg: 'rgba(34,197,94,0.1)', iconColor: '#22c55e', defaultIcon: 'MapPin' },
+  activity:  { bg: 'rgba(168,85,247,0.06)', border: 'rgba(168,85,247,0.15)', text: 'var(--text-primary)', iconBg: 'rgba(168,85,247,0.1)', iconColor: '#a855f7', defaultIcon: 'Ticket' },
+}
 
 const TYPE_ICONS = {
   flight: '✈️', hotel: '🏨', restaurant: '🍽️', train: '🚆',
@@ -167,15 +183,15 @@ interface DayPlanSidebarProps {
   selectedPlaceId: number | null
   selectedAssignmentId: number | null
   onSelectDay: (dayId: number | null) => void
-  onPlaceClick: (placeId: number) => void
+  onPlaceClick: (placeId: number | null, assignmentId?: number | null) => void
   onDayDetail: (day: Day) => void
   accommodations?: Assignment[]
   onReorder: (dayId: number, orderedIds: number[]) => void
   onUpdateDayTitle: (dayId: number, title: string) => void
   onRouteCalculated: (dayId: number, route: RouteResult | null) => void
-  onAssignToDay: (placeId: number, dayId: number) => void
+  onAssignToDay: (placeId: number, dayId: number, position?: number) => void
   onRemoveAssignment: (assignmentId: number, dayId: number) => void
-  onEditPlace: (place: Place) => void
+  onEditPlace: (place: Place, assignmentId?: number | null) => void
   onDeletePlace: (placeId: number) => void
   reservations?: Reservation[]
   visibleConnectionIds?: number[]
@@ -198,6 +214,7 @@ interface DayPlanSidebarProps {
   onAddBookingToAssignment?: (dayId: number, assignmentId: number) => void
   initialScrollTop?: number
   onScrollTopChange?: (top: number) => void
+  routeSegments?: any[]
 }
 
 const DayPlanSidebar = React.memo(function DayPlanSidebar({
@@ -228,6 +245,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
   onAddBookingToAssignment,
   initialScrollTop,
   onScrollTopChange,
+  routeSegments,
 }: DayPlanSidebarProps) {
   const toast = useToast()
   const { t, language, locale } = useTranslation()
@@ -239,10 +257,10 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
 
   const { noteUi, setNoteUi, noteInputRef, dayNotes, openAddNote: _openAddNote, openEditNote: _openEditNote, cancelNote, saveNote, deleteNote: _deleteNote, moveNote: _moveNote } = useDayNotes(tripId)
 
-  const [expandedDays, setExpandedDays] = useState(() => {
+  const [expandedDays, setExpandedDays] = useState<Set<number>>(() => {
     try {
       const saved = sessionStorage.getItem(`day-expanded-${tripId}`)
-      if (saved) return new Set(JSON.parse(saved))
+      if (saved) return new Set(JSON.parse(saved) as number[])
     } catch {}
     return new Set(days.map(d => d.id))
   })
@@ -252,7 +270,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
   const [isCalculating, setIsCalculating] = useState(false)
   const [routeInfo, setRouteInfo] = useState(null)
   const [draggingId, setDraggingId] = useState(null)
-  const [lockedIds, setLockedIds] = useState(new Set())
+  // lockedIds state removed, we now use assignment.place.time_locked
   const [lockHoverId, setLockHoverId] = useState(null)
   const [undoHover, setUndoHover] = useState(false)
   const [pdfHover, setPdfHover] = useState(false)
@@ -307,7 +325,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
     // Interner Drag hat Vorrang (Ref wird nur bei assignmentId/noteId/reservationId gesetzt)
     if (dragDataRef.current) {
       return {
-        placeId: '',
+        placeIds: [],
         assignmentId: dragDataRef.current.assignmentId || '',
         noteId: dragDataRef.current.noteId || '',
         reservationId: dragDataRef.current.reservationId || '',
@@ -317,8 +335,16 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
     }
     // Externer Drag (aus PlacesSidebar)
     const ext = window.__dragData || {}
-    const placeId = dt?.getData('placeId') || ext.placeId || ''
-    return { placeId, assignmentId: '', noteId: '', reservationId: '', fromDayId: 0, phase: 'single' as const }
+    let placeIds: number[] = []
+    if (ext.placeIds) placeIds = ext.placeIds
+    else if (dt) {
+      try { placeIds = JSON.parse(dt.getData('placeIds') || '[]') } catch {}
+    }
+    // Fallback für alte placeId
+    if (placeIds.length === 0 && (ext.placeId || (dt && dt.getData('placeId')))) {
+      placeIds = [parseInt(ext.placeId || dt.getData('placeId'))].filter(Boolean)
+    }
+    return { placeIds, assignmentId: '', noteId: '', reservationId: '', fromDayId: 0, phase: 'single' as const }
   }
 
   // Only auto-expand genuinely new days (not on initial load from storage)
@@ -514,12 +540,12 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
     return !simItems.every((item, i) => i === 0 || item.minutes >= simItems[i - 1].minutes)
   }
 
-  const openEditNote = (dayId, note, e) => {
+  const openEditNote = (dayId, note, e?) => {
     e?.stopPropagation()
     _openEditNote(dayId, note)
   }
 
-  const deleteNote = async (dayId, noteId, e) => {
+  const deleteNote = async (dayId, noteId, e?) => {
     e?.stopPropagation()
     await _deleteNote(dayId, noteId)
   }
@@ -735,22 +761,23 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
     try {
       const result = await calculateRoute(waypoints, 'walking')
       // Luftlinien zwischen Wegpunkten anzeigen
-      const lineCoords = waypoints.map(p => [p.lat, p.lng])
+      const lineCoords: [number, number][] = waypoints.map(p => [p.lat!, p.lng!])
       setRouteInfo({ distance: result.distanceText, duration: result.durationText })
-      onRouteCalculated?.({ ...result, coordinates: lineCoords })
+      onRouteCalculated?.(selectedDayId, { ...result, coordinates: lineCoords })
     } catch { toast.error(t('dayplan.toast.routeError')) }
     finally { setIsCalculating(false) }
   }
 
-  const toggleLock = (assignmentId) => {
-    const prevLocked = new Set(lockedIds)
-    setLockedIds(prev => {
-      const next = new Set(prev)
-      if (next.has(assignmentId)) next.delete(assignmentId)
-      else next.add(assignmentId)
-      return next
-    })
-    pushUndo?.(t('undo.lock'), () => { setLockedIds(prevLocked) })
+  const toggleLock = async (assignmentId) => {
+    const da = getDayAssignments(selectedDayId!)
+    const assignment = da.find(a => a.id === assignmentId)
+    if (!assignment || !assignment.place) return
+    const newLockedStatus = !assignment.place.time_locked
+    try {
+      await tripActions.updatePlace(tripId, assignment.place.id, { time_locked: newLockedStatus })
+    } catch (err: unknown) {
+      toast.error(t('common.unknownError'))
+    }
   }
 
   const handleOptimize = async () => {
@@ -764,7 +791,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
     const locked = new Map() // index -> assignment
     const unlocked = []
     da.forEach((a, i) => {
-      if (lockedIds.has(a.id)) locked.set(i, a)
+      if (a.place?.time_locked) locked.set(i, a)
       else unlocked.push(a)
     })
 
@@ -792,6 +819,94 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
     })
   }
 
+  const handleSyncTimes = async (dayId: number) => {
+    const merged = getMergedItems(dayId)
+    if (merged.length === 0) return
+
+    let currentTimeMinutes: number | null = null
+    const updates: Promise<any>[] = []
+
+    const toTimeStr = (mins: number) => {
+      const h = Math.floor(mins / 60) % 24
+      const m = Math.floor(mins % 60)
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+    }
+
+    let coordIdx = 0;
+    
+    for (let i = 0; i < merged.length; i++) {
+      const item = merged[i]
+      
+      let travelMinutes = 0
+      if (item.type === 'place' && item.data.place?.lat && item.data.place?.lng) {
+        // Find previous item to add travel time
+        if (i > 0) {
+            const segment = routeSegments?.[coordIdx - 1]
+            if (segment && segment.duration > 0) {
+              travelMinutes = Math.round(segment.duration / 60)
+            }
+        }
+        coordIdx++
+      }
+
+      if (item.type === 'place') {
+        const place = item.data.place
+        if (!place) continue
+
+        const isLocked = place.time_locked
+        if (isLocked && place.place_time) {
+          const parsed = parseTimeToMinutes(place.place_time)
+          if (parsed !== null) {
+            currentTimeMinutes = parsed + (place.duration_minutes ?? 60)
+          }
+        } else {
+          if (currentTimeMinutes !== null) {
+            const newStartTime = currentTimeMinutes + travelMinutes
+            const newTimeStr = toTimeStr(newStartTime)
+            
+            if (place.place_time !== newTimeStr) {
+              updates.push(tripActions.updatePlace(tripId, place.id, { place_time: newTimeStr }))
+            }
+            
+            currentTimeMinutes = newStartTime + (place.duration_minutes ?? 60)
+          } else {
+            if (place.place_time) {
+              const parsed = parseTimeToMinutes(place.place_time)
+              if (parsed !== null) {
+                currentTimeMinutes = parsed + (place.duration_minutes ?? 60)
+              }
+            } else {
+              // Start at 09:00 if totally unknown
+              const parsed = 9 * 60
+              currentTimeMinutes = parsed + (place.duration_minutes ?? 60)
+              updates.push(tripActions.updatePlace(tripId, place.id, { place_time: "09:00" }))
+            }
+          }
+        }
+      } else if (item.type === 'transport') {
+        const transport = item.data
+        if (transport.reservation_time) {
+           const parsed = parseTimeToMinutes(transport.reservation_time)
+           if (parsed !== null) currentTimeMinutes = parsed
+        }
+      }
+    }
+
+    if (updates.length > 0) {
+      setIsCalculating(true)
+      try {
+        await Promise.all(updates)
+        toast.success(t('dayplan.toast.timesSynced') || 'Itinerary times synced successfully.')
+      } catch (err) {
+        toast.error(t('common.unknownError'))
+      } finally {
+        setIsCalculating(false)
+      }
+    } else {
+      toast.success(t('dayplan.toast.timesSynced') || 'Itinerary times synced successfully.')
+    }
+  }
+
   const handleGoogleMaps = () => {
     if (!selectedDayId) return
     const da = getDayAssignments(selectedDayId)
@@ -804,14 +919,14 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
     e.preventDefault()
     e.stopPropagation()
     setDragOverDayId(null)
-    const { placeId, assignmentId, noteId, reservationId: fromReservationId, fromDayId, phase } = getDragData(e)
+    const { placeIds, assignmentId, noteId, reservationId: fromReservationId, fromDayId, phase } = getDragData(e)
     if (fromReservationId && fromDayId !== dayId) {
       const r = reservations.find(x => x.id === Number(fromReservationId))
       if (r) { const update = computeMultiDayMove(r, dayId, phase); tripActions.updateReservation(tripId, r.id, update).catch((err: unknown) => toast.error(err instanceof Error ? err.message : t('common.unknownError'))) }
       setDraggingId(null); setDropTargetKey(null); dragDataRef.current = null; window.__dragData = null; return
     }
-    if (placeId) {
-      onAssignToDay?.(parseInt(placeId), dayId)
+    if (placeIds && placeIds.length > 0) {
+      placeIds.forEach(pid => onAssignToDay?.(pid, dayId))
     } else if (assignmentId && fromDayId !== dayId) {
       const srcAssignment = (useTripStore.getState().assignments[String(fromDayId)] || []).find(a => a.id === Number(assignmentId))
       const capturedFromDayId = fromDayId
@@ -836,11 +951,14 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
     e.preventDefault()
     e.stopPropagation()
     setDragOverDayId(null)
-    const placeId = e.dataTransfer.getData('placeId')
-    const fromAssignmentId = e.dataTransfer.getData('assignmentId')
+    const dt = e.dataTransfer
+    let placeIds: number[] = []
+    if (dt) { try { placeIds = JSON.parse(dt.getData('placeIds') || '[]') } catch {} }
+    if (placeIds.length === 0 && dt?.getData('placeId')) placeIds = [parseInt(dt.getData('placeId'))]
+    const fromAssignmentId = dt?.getData('assignmentId')
 
-    if (placeId) {
-      onAssignToDay?.(parseInt(placeId), dayId)
+    if (placeIds.length > 0) {
+      placeIds.forEach(pid => onAssignToDay?.(pid, dayId, toIdx))
     } else if (fromAssignmentId) {
       const da = getDayAssignments(dayId)
       const fromIdx = da.findIndex(a => String(a.id) === fromAssignmentId)
@@ -874,7 +992,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                   notes.map(n => ({ ...n, day_id: Number(dayId) }))
                 )
                 try {
-                  await downloadTripPDF({ trip, days, places, assignments, categories, dayNotes: flatNotes, reservations, t, locale })
+                  await downloadTripPDF({ trip, days, places, assignments, categories, dayNotes: flatNotes as any, reservations, t, locale })
                 } catch (e) {
                   console.error('PDF error:', e)
                   toast.error(t('dayplan.pdfError') + ': ' + (e?.message || String(e)))
@@ -955,7 +1073,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
               <Tooltip label={label} placement="bottom">
                 <button
                   onClick={() => {
-                    const next = allExpanded ? new Set() : new Set(days.map(d => d.id))
+                    const next = allExpanded ? new Set<number>() : new Set(days.map(d => d.id))
                     setExpandedDays(next)
                     try { sessionStorage.setItem(`day-expanded-${tripId}`, JSON.stringify([...next])) } catch {}
                   }}
@@ -1049,7 +1167,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
               <div
                 onClick={() => { onSelectDay(day.id); if (onDayDetail) onDayDetail(day) }}
                 onDragOver={e => { e.preventDefault(); if (dragOverDayId !== day.id) setDragOverDayId(day.id) }}
-                onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOverDayId(null) }}
+                onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverDayId(null) }}
                 onDrop={e => handleDropOnDay(e, day.id)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 10,
@@ -1127,6 +1245,30 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                         </button>
                         </Tooltip>
                       )}
+                      {canEditDays && isExpanded && merged.length > 0 && (
+                        <Tooltip label={t('dayplan.syncTimes') || 'Sync times based on duration and travel'} placement="top">
+                          <button
+                            onClick={e => { e.stopPropagation(); handleSyncTimes(day.id) }}
+                            disabled={isCalculating}
+                            aria-label="Sync times"
+                            style={{
+                              flexShrink: 0,
+                              background: 'none',
+                              border: 'none',
+                              padding: '4px',
+                              cursor: isCalculating ? 'not-allowed' : 'pointer',
+                              opacity: isCalculating ? 0.2 : 0.45,
+                              display: 'flex',
+                              alignItems: 'center',
+                              borderRadius: 4,
+                            }}
+                            onMouseEnter={e => { if (!isCalculating) (e.currentTarget as HTMLElement).style.opacity = '1' }}
+                            onMouseLeave={e => { if (!isCalculating) (e.currentTarget as HTMLElement).style.opacity = '0.45' }}
+                          >
+                            {isCalculating ? <Loader2 size={15} strokeWidth={1.8} color="var(--text-secondary)" className="animate-spin" /> : <Clock size={15} strokeWidth={1.8} color="var(--text-secondary)" />}
+                          </button>
+                        </Tooltip>
+                      )}
                       {(() => {
                         const dayAccs = accommodations.filter(a => isDayInAccommodationRange(day, a.start_day_id, a.end_day_id, days))
                           // Sort: check-out first, then ongoing stays, then check-in last
@@ -1174,8 +1316,8 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                     {cost && <span style={{ fontSize: 11, color: '#059669' }}>{cost}</span>}
                     {day.date && anyGeoPlace && <span style={{ width: 1, height: 10, background: 'var(--text-faint)', opacity: 0.3, flexShrink: 0 }} />}
                     {day.date && anyGeoPlace && (() => {
-                      const wLat = loc?.place.lat ?? anyGeoPlace?.place?.lat ?? anyGeoPlace?.lat
-                      const wLng = loc?.place.lng ?? anyGeoPlace?.place?.lng ?? anyGeoPlace?.lng
+                      const wLat = loc?.place?.lat ?? ('place' in anyGeoPlace ? (anyGeoPlace as any).place?.lat : (anyGeoPlace as any).lat)
+                      const wLng = loc?.place?.lng ?? ('place' in anyGeoPlace ? (anyGeoPlace as any).place?.lng : (anyGeoPlace as any).lng)
                       return <WeatherWidget lat={wLat} lng={wLng} date={day.date} compact />
                     })()}
                   </div>
@@ -1206,15 +1348,15 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                   onDrop={e => {
                     e.preventDefault()
                     e.stopPropagation()
-                    const { placeId, assignmentId, noteId, reservationId: fromReservationId, fromDayId, phase } = getDragData(e)
+                    const { placeIds, assignmentId, noteId, reservationId: fromReservationId, fromDayId, phase } = getDragData(e)
                     // Drop on transport card (detected via dropTargetRef for sync accuracy)
                     if (dropTargetRef.current?.startsWith('transport-')) {
                       const isAfter = dropTargetRef.current.startsWith('transport-after-')
                       const parts = dropTargetRef.current.replace('transport-after-', '').replace('transport-', '').split('-')
                       const transportId = Number(parts[0])
 
-                      if (placeId) {
-                        onAssignToDay?.(parseInt(placeId), day.id)
+                      if (placeIds && placeIds.length > 0) {
+                        placeIds.forEach(pid => onAssignToDay?.(pid, day.id))
                       } else if (fromReservationId && fromDayId !== day.id) {
                         const r = reservations.find(x => x.id === Number(fromReservationId))
                         if (r) { const update = computeMultiDayMove(r, day.id, phase); tripActions.updateReservation(tripId, r.id, update).catch((err: unknown) => toast.error(err instanceof Error ? err.message : t('common.unknownError'))) }
@@ -1238,9 +1380,9 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                       if (r) { const update = computeMultiDayMove(r, day.id, phase); tripActions.updateReservation(tripId, r.id, update).catch((err: unknown) => toast.error(err instanceof Error ? err.message : t('common.unknownError'))) }
                       setDraggingId(null); setDropTargetKey(null); dragDataRef.current = null; return
                     }
-                    if (!assignmentId && !noteId && !placeId) { dragDataRef.current = null; window.__dragData = null; return }
-                    if (placeId) {
-                      onAssignToDay?.(parseInt(placeId), day.id)
+                    if (!assignmentId && !noteId && !(placeIds && placeIds.length > 0)) { dragDataRef.current = null; window.__dragData = null; return }
+                    if (placeIds && placeIds.length > 0) {
+                      placeIds.forEach(pid => onAssignToDay?.(pid, day.id))
                       setDropTargetKey(null); window.__dragData = null; return
                     }
                     if (assignmentId && fromDayId !== day.id) {
@@ -1271,8 +1413,14 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                     >
                       <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>{t('dayplan.emptyDay')}</span>
                     </div>
-                  ) : (
-                    merged.map((item, idx) => {
+                  ) : (() => {
+                    let coordIdx = 0;
+                    return merged.map((item, idx) => {
+                      let segment: any = null;
+                      if (day.id === selectedDayId && item.type === 'place' && item.data.place?.lat && item.data.place?.lng) {
+                        segment = routeSegments?.[coordIdx] || null;
+                        coordIdx++;
+                      }
                       const itemKey = item.type === 'transport' ? `transport-${item.data.id}-${day.id}` : (item.type === 'place' ? `place-${item.data.id}` : `note-${item.data.id}`)
                       const showDropLine = (!!draggingId || !!dropTargetKey) && dropTargetKey === itemKey
                       const showDropLineAfter = item.type === 'transport' && (!!draggingId || !!dropTargetKey) && dropTargetKey === `transport-after-${item.data.id}-${day.id}`
@@ -1335,10 +1483,10 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                             onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDragOverDayId(null); if (dropTargetKey !== `place-${assignment.id}`) setDropTargetKey(`place-${assignment.id}`) }}
                             onDrop={e => {
                               e.preventDefault(); e.stopPropagation()
-                              const { placeId, assignmentId: fromAssignmentId, noteId, reservationId: fromReservationId, fromDayId, phase } = getDragData(e)
-                              if (placeId) {
-                                const pos = placeItems.findIndex(i => i.data.id === assignment.id)
-                                onAssignToDay?.(parseInt(placeId), day.id, pos >= 0 ? pos : undefined)
+                              const { placeIds, assignmentId: fromAssignmentId, noteId, reservationId: fromReservationId, fromDayId, phase } = getDragData(e)
+                              if (placeIds && placeIds.length > 0) {
+                                const toIdx = getDayAssignments(day.id).findIndex(a => a.id === assignment.id)
+                                placeIds.forEach(pid => onAssignToDay?.(pid, day.id, toIdx !== -1 ? toIdx : undefined))
                                 setDropTargetKey(null); window.__dragData = null
                               } else if (fromReservationId && fromDayId !== day.id) {
                                 const r = reservations.find(x => x.id === Number(fromReservationId))
@@ -1378,7 +1526,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                               }
                             }}
                             onDragEnd={() => { setDraggingId(null); setDragOverDayId(null); setDropTargetKey(null); dragDataRef.current = null }}
-                            onClick={() => { onPlaceClick(isPlaceSelected ? null : place.id, isPlaceSelected ? null : assignment.id); if (!isPlaceSelected) onSelectDay(day.id, true) }}
+                            onClick={() => { onPlaceClick(isPlaceSelected ? null : place.id, isPlaceSelected ? null : assignment.id); if (!isPlaceSelected) onSelectDay(day.id) }}
                             onContextMenu={e => ctxMenu.open(e, [
                               canEditDays && onEditPlace && { label: t('common.edit'), icon: Pencil, onClick: () => onEditPlace(place, assignment.id) },
                               canEditDays && onRemoveAssignment && { label: t('planner.removeFromDay'), icon: Trash2, onClick: () => onRemoveAssignment(day.id, assignment.id) },
@@ -1388,14 +1536,14 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                               canEditDays && onDeletePlace && { label: t('common.delete'), icon: Trash2, danger: true, onClick: () => onDeletePlace(place.id) },
                             ])}
                             onMouseEnter={e => {
-                              if (!isPlaceSelected && !lockedIds.has(assignment.id))
+                              if (!isPlaceSelected && !assignment.place?.time_locked)
                                 e.currentTarget.style.background = 'var(--bg-hover)'
                               const grip = e.currentTarget.querySelector('.dp-grip') as HTMLElement | null
                               if (grip) grip.style.opacity = '1'
                               setHoveredAssignmentId(assignment.id)
                             }}
                             onMouseLeave={e => {
-                              if (!isPlaceSelected && !lockedIds.has(assignment.id))
+                              if (!isPlaceSelected && !assignment.place?.time_locked)
                                 e.currentTarget.style.background = 'transparent'
                               const grip = e.currentTarget.querySelector('.dp-grip') as HTMLElement | null
                               if (grip) grip.style.opacity = '0.3'
@@ -1405,10 +1553,10 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                               display: 'flex', alignItems: 'center', gap: 8,
                               padding: '7px 8px 7px 10px',
                               cursor: 'pointer',
-                              background: lockedIds.has(assignment.id)
+                              background: assignment.place?.time_locked
                                 ? 'rgba(220,38,38,0.08)'
                                 : isPlaceSelected ? 'var(--bg-selected)' : 'transparent',
-                              borderLeft: lockedIds.has(assignment.id)
+                              borderLeft: assignment.place?.time_locked
                                 ? '3px solid #dc2626'
                                 : '3px solid transparent',
                               borderTop: showDropLine ? '2px solid var(--text-primary)' : undefined,
@@ -1427,10 +1575,10 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                             >
                               <PlaceAvatar place={place} category={cat} size={28} />
                               {/* Hover/locked overlay */}
-                              {(lockHoverId === assignment.id || lockedIds.has(assignment.id)) && (
+                              {(lockHoverId === assignment.id || assignment.place?.time_locked) && (
                                 <div style={{
                                   position: 'absolute', inset: 0, borderRadius: '50%',
-                                  background: lockedIds.has(assignment.id) ? 'rgba(220,38,38,0.6)' : 'rgba(220,38,38,0.4)',
+                                  background: assignment.place?.time_locked ? 'rgba(220,38,38,0.6)' : 'rgba(220,38,38,0.4)',
                                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                                   transition: 'background 0.15s',
                                 }}>
@@ -1446,7 +1594,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                                   fontSize: 11, fontWeight: 500, padding: '5px 10px', borderRadius: 8,
                                   boxShadow: '0 4px 12px rgba(0,0,0,0.15)', border: '1px solid var(--border-faint, #e5e7eb)',
                                 }}>
-                                  {lockedIds.has(assignment.id)
+                                  {assignment.place?.time_locked
                                     ? t('planner.clickToUnlock')
                                     : t('planner.keepPosition')}
                                 </div>
@@ -1456,7 +1604,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                               <div style={{ display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden' }}>
                                 {cat && (() => {
                                   const CatIcon = getCategoryIcon(cat.icon)
-                                  return <CatIcon size={10} strokeWidth={2} color={cat.color || 'var(--text-muted)'} title={cat.name} style={{ flexShrink: 0 }} />
+                                  return <span title={cat.name} style={{ display: 'flex', flexShrink: 0 }}><CatIcon size={10} strokeWidth={2} color={cat.color || 'var(--text-muted)'} /></span>
                                 })()}
                                 <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>
                                   {place.name}
@@ -1599,7 +1747,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                                   gap: 3,
                                   fontSize: 10,
                                   fontWeight: 500,
-                                  color: 'var(--text-muted)',
+                              color: 'var(--text-muted)',
                                   fontFamily: 'inherit',
                                 }}
                               >
@@ -1607,6 +1755,49 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                               </button>
                             )}
                           </div>
+                          {segment && (
+                            <div style={{ display: 'flex', marginLeft: 30, padding: '2px 0', alignItems: 'center', gap: 6 }}>
+                              <div style={{ width: 2, height: 16, background: 'var(--border-primary)', marginLeft: 13 }} />
+                              <a
+                                href={item.data.place && routeSegments && routeSegments[coordIdx - 1] ? `https://www.google.com/maps/dir/${item.data.place.lat},${item.data.place.lng}/${merged.slice(idx + 1).find(i => i.type === 'place' && i.data.place?.lat)?.data.place?.lat},${merged.slice(idx + 1).find(i => i.type === 'place' && i.data.place?.lat)?.data.place?.lng}` : '#'}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  display: 'flex', alignItems: 'center', gap: 6,
+                                  marginLeft: 12, padding: '2px 8px', borderRadius: 12,
+                                  background: 'var(--bg-elevated)', color: 'var(--text-faint)',
+                                  fontSize: 10, fontWeight: 600, textDecoration: 'none',
+                                  border: '1px solid var(--border-primary)',
+                                }}
+                                onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.borderColor = 'var(--text-muted)' }}
+                                onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-faint)'; e.currentTarget.style.borderColor = 'var(--border-primary)' }}
+                                onClick={e => e.stopPropagation()}
+                              >
+                                <Car size={10} />
+                                {segment.drivingText}
+                              </a>
+
+                              {/* Travel Warning / Alert */}
+                              {(segment.duration > 3 * 3600 || segment.distance > 2000 || (segment.distance / (5000 / 3600)) > 30 * 60) && (
+                                <Tooltip label={
+                                  segment.duration > 3 * 3600
+                                    ? t('dayplan.warning.longDrive') || `Long transport warning: driving takes over 3 hours`
+                                    : t('dayplan.warning.longWalk') || `Long walk warning: walking takes over 30 minutes`
+                                } placement="top">
+                                  <span style={{
+                                    display: 'flex', alignItems: 'center', gap: 4,
+                                    padding: '2px 8px', borderRadius: 12,
+                                    background: 'rgba(245, 158, 11, 0.08)',
+                                    color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.2)',
+                                    fontSize: 10, fontWeight: 600, cursor: 'help'
+                                  }}>
+                                    <AlertTriangle size={10} />
+                                    {segment.duration > 3 * 3600 ? t('dayplan.warning.longDriveLabel') || 'Long Drive' : t('dayplan.warning.longWalkLabel') || 'Long Walk'}
+                                  </span>
+                                </Tooltip>
+                              )}
+                            </div>
+                          )}
                           </React.Fragment>
                         )
                       }
@@ -1665,9 +1856,9 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                               e.preventDefault(); e.stopPropagation()
                               const rect = e.currentTarget.getBoundingClientRect()
                               const insertAfter = e.clientY > rect.top + rect.height / 2
-                              const { placeId, assignmentId: fromAssignmentId, noteId, reservationId: fromReservationId, fromDayId, phase } = getDragData(e)
-                              if (placeId) {
-                                onAssignToDay?.(parseInt(placeId), day.id)
+                              const { placeIds, assignmentId: fromAssignmentId, noteId: fromNoteId, reservationId: fromReservationId, fromDayId, phase } = getDragData(e)
+                              if (placeIds && placeIds.length > 0) {
+                                placeIds.forEach(pid => onAssignToDay?.(pid, day.id))
                               } else if (fromReservationId && fromDayId !== day.id) {
                                 const r2 = reservations.find(x => x.id === Number(fromReservationId))
                                 if (r2) { const update = computeMultiDayMove(r2, day.id, phase); tripActions.updateReservation(tripId, r2.id, update).catch((err: unknown) => toast.error(err instanceof Error ? err.message : t('common.unknownError'))) }
@@ -1677,10 +1868,14 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                                 tripActions.moveAssignment(tripId, Number(fromAssignmentId), fromDayId, day.id).catch((err: unknown) => toast.error(err instanceof Error ? err.message : t('common.unknownError')))
                               } else if (fromAssignmentId) {
                                 handleMergedDrop(day.id, 'place', Number(fromAssignmentId), 'transport', res.id, insertAfter)
-                              } else if (noteId && fromDayId !== day.id) {
-                                tripActions.moveDayNote(tripId, fromDayId, day.id, Number(noteId)).catch((err: unknown) => toast.error(err instanceof Error ? err.message : t('common.unknownError')))
-                              } else if (noteId) {
-                                handleMergedDrop(day.id, 'note', Number(noteId), 'transport', res.id, insertAfter)
+                              } else if (fromNoteId && fromDayId !== day.id) {
+                                const tm = getMergedItems(day.id)
+                                const toIdx = tm.findIndex(i => i.type === 'transport' && i.data.id === res.id)
+                                const so = toIdx <= 0 ? (tm[0]?.sortKey ?? 0) - 1 : (tm[toIdx - 1].sortKey + tm[toIdx].sortKey) / 2
+                                tripActions.moveDayNote(tripId, fromDayId, day.id, Number(fromNoteId), so).catch((err: unknown) => toast.error(err instanceof Error ? err.message : t('common.unknownError')))
+                                setDraggingId(null); setDropTargetKey(null); dragDataRef.current = null
+                              } else if (fromNoteId) {
+                                handleMergedDrop(day.id, 'note', Number(fromNoteId), 'transport', res.id, insertAfter)
                               }
                               setDraggingId(null); setDropTargetKey(null); dragDataRef.current = null; window.__dragData = null
                             }}
@@ -1775,7 +1970,8 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
 
                       // Notizkarte
                       const note = item.data
-                      const NoteIcon = getNoteIcon(note.icon)
+                      const catStyle = NOTE_CATEGORY_STYLES[note.category || 'general'] || NOTE_CATEGORY_STYLES.general
+                      const NoteIcon = getNoteIcon(note.icon && note.icon !== 'FileText' ? note.icon : catStyle.defaultIcon)
                       const noteIdx = idx
                       return (
                         <React.Fragment key={`note-${note.id}`}>
@@ -1786,15 +1982,12 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                           onDragOver={e => { e.preventDefault(); e.stopPropagation(); if (dropTargetKey !== `note-${note.id}`) setDropTargetKey(`note-${note.id}`) }}
                           onDrop={e => {
                             e.preventDefault(); e.stopPropagation()
-                            const { placeId, noteId: fromNoteId, assignmentId: fromAssignmentId, reservationId: fromReservationId, fromDayId, phase } = getDragData(e)
-                            if (placeId) {
+                            const { placeIds, noteId: fromNoteId, assignmentId: fromAssignmentId, reservationId: fromReservationId, fromDayId, phase } = getDragData(e)
+                            if (placeIds && placeIds.length > 0) {
                               // New place dropped onto a note: insert it among the
                               // assignments at the note's position (after the places
                               // above it), so it lands right where the note sits.
-                              const tm = getMergedItems(day.id)
-                              const noteIdx = tm.findIndex(i => i.type === 'note' && i.data.id === note.id)
-                              const pos = tm.slice(0, noteIdx).filter(i => i.type === 'place').length
-                              onAssignToDay?.(parseInt(placeId), day.id, pos)
+                              placeIds.forEach(pid => onAssignToDay?.(pid, day.id))
                               setDropTargetKey(null); window.__dragData = null
                             } else if (fromReservationId && fromDayId !== day.id) {
                               const r = reservations.find(x => x.id === Number(fromReservationId))
@@ -1842,9 +2035,9 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                             padding: '7px 8px 7px 2px',
                             margin: '1px 8px',
                             borderRadius: 6,
-                            border: '1px solid var(--border-faint)',
+                            border: `1px solid ${catStyle.border}`,
                             borderTop: showDropLine ? '2px solid var(--text-primary)' : undefined,
-                            background: 'var(--bg-hover)',
+                            background: catStyle.bg,
                             opacity: draggingId === `note-${note.id}` ? 0.4 : 1,
                             transition: 'background 0.1s', cursor: 'grab', userSelect: 'none',
                           }}
@@ -1852,8 +2045,8 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                           {canEditDays && <div className="dp-grip" style={{ flexShrink: 0, color: 'var(--text-faint)', display: 'flex', alignItems: 'center', opacity: 0.3, transition: 'opacity 0.15s', cursor: 'grab' }}>
                             <GripVertical size={13} strokeWidth={1.8} />
                           </div>}
-                          <div style={{ width: 28, height: 28, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', background: 'var(--bg-hover)', overflow: 'hidden' }}>
-                            <NoteIcon size={13} strokeWidth={1.8} color="var(--text-muted)" />
+                          <div style={{ width: 28, height: 28, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', background: catStyle.iconBg, overflow: 'hidden' }}>
+                            <NoteIcon size={13} strokeWidth={1.8} color={catStyle.iconColor} />
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
@@ -1875,21 +2068,21 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                         </React.Fragment>
                       )
                     })
-                  )}
+                  })()}
                   {/* Drop-Zone am Listenende — immer vorhanden als Drop-Target */}
                   <div
                     style={{ minHeight: 12, padding: '2px 8px' }}
                     onDragOver={e => { e.preventDefault(); e.stopPropagation(); if (dropTargetKey !== `end-${day.id}`) setDropTargetKey(`end-${day.id}`) }}
                     onDrop={e => {
                       e.preventDefault(); e.stopPropagation()
-                      const { placeId, assignmentId, noteId, reservationId: fromReservationId, fromDayId, phase } = getDragData(e)
+                      const { placeIds, assignmentId, noteId, reservationId, fromDayId, phase } = getDragData(e)
                       // Neuer Ort von der Orte-Liste
-                      if (placeId) {
-                        onAssignToDay?.(parseInt(placeId), day.id)
+                      if (placeIds && placeIds.length > 0) {
+                        placeIds.forEach(pid => onAssignToDay?.(pid, day.id))
                         setDropTargetKey(null); window.__dragData = null; return
                       }
-                      if (fromReservationId && fromDayId !== day.id) {
-                        const r = reservations.find(x => x.id === Number(fromReservationId))
+                      if (reservationId && fromDayId !== day.id) {
+                        const r = reservations.find(x => x.id === Number(reservationId))
                         if (r) { const update = computeMultiDayMove(r, day.id, phase); tripActions.updateReservation(tripId, r.id, update).catch((err: unknown) => toast.error(err instanceof Error ? err.message : t('common.unknownError'))) }
                         setDraggingId(null); setDropTargetKey(null); dragDataRef.current = null; window.__dragData = null; return
                       }
@@ -1976,6 +2169,38 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
           }} onClick={e => e.stopPropagation()}>
             <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
               {ui.mode === 'add' ? t('dayplan.noteAdd') : t('dayplan.noteEdit')}
+            </div>
+            {/* Kategorie-Auswahl */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                {t('dayplan.noteCategory') || 'Category'}
+              </div>
+              <div style={{ display: 'flex', gap: 4, overflowX: 'auto', paddingBottom: 4 }}>
+                {NOTE_CATEGORIES.map(cat => {
+                  const active = (ui.category || 'general') === cat.id
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setNoteUi(prev => ({ ...prev, [dayId]: { ...prev[dayId], category: cat.id } }))}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: 6,
+                        fontSize: 11,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        border: 'none',
+                        background: active ? cat.color : 'var(--bg-secondary)',
+                        color: active ? '#fff' : 'var(--text-muted)',
+                        whiteSpace: 'nowrap',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      {t(`dayplan.cat_${cat.id}`) || cat.label}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
             {/* Icon-Auswahl */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>

@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import apiClient from '../api/client'
 import type { AxiosResponse } from 'axios'
-import type { VacayPlan, VacayUser, VacayEntry, VacayStat, HolidaysMap, HolidayInfo, VacayHolidayCalendar } from '../types'
+import type { VacayPlan, VacayUser, VacayEntry, VacayStat, VacayStatExtended, HolidaysMap, HolidayInfo, VacayHolidayCalendar } from '../types'
 
 const ax = apiClient
 
@@ -34,7 +34,7 @@ interface VacayEntriesResponse {
 }
 
 interface VacayStatsResponse {
-  stats: VacayStat[]
+  stats: VacayStatExtended[]
 }
 
 interface VacayHolidayRaw {
@@ -105,7 +105,7 @@ interface VacayState {
   years: number[]
   entries: VacayEntry[]
   companyHolidays: string[]
-  stats: VacayStat[]
+  stats: VacayStatExtended[]
   selectedYear: number
   selectedUserId: number | null
   holidays: HolidaysMap

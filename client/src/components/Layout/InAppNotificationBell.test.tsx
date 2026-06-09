@@ -12,7 +12,7 @@ let _notifId = 1;
 function buildNotification(overrides: Record<string, unknown> = {}) {
   return {
     id: _notifId++,
-    type: 'simple',
+    type: 'simple' as const,
     scope: 'trip',
     target: 1,
     sender_id: 2,
@@ -93,7 +93,7 @@ describe('InAppNotificationBell', () => {
   it('FE-COMP-BELL-007: panel shows Mark all read button when panel is open', async () => {
     const user = userEvent.setup();
     const notification = {
-      id: 1, type: 'simple', scope: 'trip', target: 1, sender_id: 2,
+      id: 1, type: 'simple' as const, scope: 'trip', target: 1, sender_id: 2,
       sender_username: 'alice', sender_avatar: null, recipient_id: 1,
       title_key: 'test', title_params: '{}', text_key: 'test.text', text_params: '{}',
       positive_text_key: null, negative_text_key: null, response: null,

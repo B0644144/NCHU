@@ -5,11 +5,15 @@ import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
 import { X, Clock, MapPin, ExternalLink, Phone, Euro, Edit2, Trash2, Plus, Minus, ChevronDown, ChevronUp, FileText, Upload, File, FileImage, Star, Navigation, Users, Mountain, TrendingUp } from 'lucide-react'
 import PlaceAvatar from '../shared/PlaceAvatar'
+import PropertiesEditor from '../shared/PropertiesEditor'
 import { mapsApi } from '../../api/client'
 import { useSettingsStore } from '../../store/settingsStore'
 import { getCategoryIcon } from '../shared/categoryIcons'
 import { useTranslation } from '../../i18n'
-import type { Place, Category, Day, Assignment, Reservation, TripFile, AssignmentsMap } from '../../types'
+import SkiConditionBadges from '../AI/SkiConditionBadges'
+import SkiRouteVoting from '../AI/SkiRouteVoting'
+import SkiElevationChart from '../AI/SkiElevationChart'
+import type { Place, Category, Day, Assignment, Reservation, TripFile, AssignmentsMap, TripMember } from '../../types'
 import { splitReservationDateTime } from '../../utils/formatters'
 
 const detailsCache = new Map()
@@ -101,11 +105,7 @@ function formatFileSize(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-interface TripMember {
-  id: number
-  username: string
-  avatar_url?: string | null
-}
+
 
 interface PlaceInspectorProps {
   place: Place | null
@@ -124,7 +124,7 @@ interface PlaceInspectorProps {
   onFileUpload?: (fd: FormData) => Promise<void>
   tripMembers?: TripMember[]
   onSetParticipants: (assignmentId: number, dayId: number, participantIds: number[]) => void
-  onUpdatePlace: (placeId: number, data: Partial<Place>) => void
+  onUpdatePlace: (placeId: number, data: Partial<Place>) => Promise<void> | void
   leftWidth?: number
   rightWidth?: number
 }
@@ -190,7 +190,7 @@ export default function PlaceInspector({
       for (const file of selectedFiles) {
         const fd = new FormData()
         fd.append('file', file)
-        fd.append('place_id', place.id)
+        fd.append('place_id', String(place.id))
         await onFileUpload(fd)
       }
       setFilesExpanded(true)
@@ -330,7 +330,7 @@ export default function PlaceInspector({
                 />
               )
             })()}
-            {place.price > 0 && (
+            {Number(place.price) > 0 && (
               <Chip icon={<Euro size={12} />} text={`${place.price} ${place.currency || '€'}`} color="#059669" bg="#ecfdf5" />
             )}
           </div>
@@ -359,12 +359,29 @@ export default function PlaceInspector({
             </div>
           )}
 
+          {/* Ski Conditions & Voting & Elevation */}
+          {place.properties?.type === 'ski_route' && (
+            <>
+              <SkiConditionBadges place={place} />
+              <SkiRouteVoting place={place} onUpdatePlace={onUpdatePlace} />
+              <SkiElevationChart place={place} />
+            </>
+          )}
+
+          {/* Properties Editor */}
+          <div style={{ background: 'var(--bg-hover)', borderRadius: 10, overflow: 'hidden', padding: '10px 12px' }}>
+            <PropertiesEditor 
+              properties={place.properties} 
+              onChange={(newProps) => onUpdatePlace(place.id, { properties: newProps })} 
+            />
+          </div>
+
           {/* Reservation + Participants — side by side */}
           {(() => {
             const res = selectedAssignmentId ? reservations.find(r => r.assignment_id === selectedAssignmentId) : null
             const assignment = selectedAssignmentId ? (assignments[String(selectedDayId)] || []).find(a => a.id === selectedAssignmentId) : null
             const currentParticipants = assignment?.participants || []
-            const participantIds = currentParticipants.map(p => p.user_id)
+            const participantIds = currentParticipants.map(p => p.id || (p as any).user_id)
             const allJoined = currentParticipants.length === 0
             const showParticipants = selectedAssignmentId && tripMembers.length > 1
             if (!res && !showParticipants) return null
@@ -620,10 +637,10 @@ export default function PlaceInspector({
         <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border-faint)', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
           {selectedDayId && (
             assignmentInDay ? (
-              <ActionButton onClick={() => onRemoveAssignment(selectedDayId, assignmentInDay.id)} variant="ghost" icon={<Minus size={13} />}
+              <ActionButton onClick={() => onRemoveAssignment(assignmentInDay.id, selectedDayId)} variant="ghost" icon={<Minus size={13} />}
                 label={<><span className="hidden sm:inline">{t('inspector.removeFromDay')}</span><span className="sm:hidden">{t('inspector.remove')}</span></>} />
             ) : (
-              <ActionButton onClick={() => onAssignToDay(place.id)} variant="primary" icon={<Plus size={13} />} label={t('inspector.addToDay')} />
+              <ActionButton onClick={() => onAssignToDay(place.id, selectedDayId)} variant="primary" icon={<Plus size={13} />} label={t('inspector.addToDay')} />
             )
           )}
           {googleDetails?.google_maps_url && (

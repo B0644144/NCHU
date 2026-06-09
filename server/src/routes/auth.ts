@@ -162,6 +162,7 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
   }
   if (result.error) return res.status(result.status!).json({ error: result.error });
   if (result.mfa_required) return res.json({ mfa_required: true, mfa_token: result.mfa_token });
+  setAuthCookie(res, result.token!, req);
   res.json({ token: result.token, user: result.user });
 });
 

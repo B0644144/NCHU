@@ -1716,4 +1716,62 @@ describe('DayPlanSidebar', () => {
     expect(onEditTransport).toHaveBeenCalledWith(res)
     expect(onEditReservation).not.toHaveBeenCalled()
   })
+
+  it('FE-PLANNER-DAYPLAN-099: renders warning badges when travel segments are exceptionally long', () => {
+    const day = buildDay({ id: 10, date: '2025-06-01', title: 'Day 1' })
+    const place1 = buildPlace({ id: 1, name: 'Start Place', lat: 50.0, lng: 10.0 })
+    const place2 = buildPlace({ id: 2, name: 'End Place', lat: 50.1, lng: 10.1 })
+    const assignment1 = buildAssignment({ id: 91, day_id: 10, order_index: 0, place: place1 })
+    const assignment2 = buildAssignment({ id: 92, day_id: 10, order_index: 1, place: place2 })
+    const assignments = { '10': [assignment1, assignment2] }
+
+    const longWalkSegment = {
+      from: [50.0, 10.0] as [number, number],
+      to: [50.1, 10.1] as [number, number],
+      mid: [50.05, 10.05] as [number, number],
+      walkingText: '1 h 15 min',
+      drivingText: '10 min',
+      distance: 3000,
+      duration: 600,
+    }
+
+    render(<DayPlanSidebar {...makeDefaultProps({
+      selectedDayId: 10,
+      days: [day],
+      places: [place1, place2],
+      assignments,
+      routeSegments: [longWalkSegment],
+    })} />)
+
+    expect(screen.getByText('Long Walk')).toBeInTheDocument()
+  })
+
+  it('FE-PLANNER-DAYPLAN-100: renders long drive warning when driving duration is over 3 hours', () => {
+    const day = buildDay({ id: 10, date: '2025-06-01', title: 'Day 1' })
+    const place1 = buildPlace({ id: 1, name: 'Start Place', lat: 50.0, lng: 10.0 })
+    const place2 = buildPlace({ id: 2, name: 'End Place', lat: 50.1, lng: 10.1 })
+    const assignment1 = buildAssignment({ id: 91, day_id: 10, order_index: 0, place: place1 })
+    const assignment2 = buildAssignment({ id: 92, day_id: 10, order_index: 1, place: place2 })
+    const assignments = { '10': [assignment1, assignment2] }
+
+    const longDriveSegment = {
+      from: [50.0, 10.0] as [number, number],
+      to: [50.1, 10.1] as [number, number],
+      mid: [50.05, 10.05] as [number, number],
+      walkingText: '20 h',
+      drivingText: '3 h 15 min',
+      distance: 350000,
+      duration: 11700,
+    }
+
+    render(<DayPlanSidebar {...makeDefaultProps({
+      selectedDayId: 10,
+      days: [day],
+      places: [place1, place2],
+      assignments,
+      routeSegments: [longDriveSegment],
+    })} />)
+
+    expect(screen.getByText('Long Drive')).toBeInTheDocument()
+  })
 })

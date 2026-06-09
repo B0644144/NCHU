@@ -27,13 +27,39 @@ function loadItemMembers(itemId: number | string) {
 // CRUD
 // ---------------------------------------------------------------------------
 
-export function listBudgetItems(tripId: string | number) {
-  const items = db.prepare(`
+export function listBudgetItems(
+  tripId: string | number,
+  filters?: { q?: string; category?: string; user_id?: string | number; persons?: string | number }
+) {
+  let queryStr = `
     SELECT bi.* FROM budget_items bi
     LEFT JOIN budget_category_order bco ON bco.trip_id = bi.trip_id AND bco.category = bi.category
     WHERE bi.trip_id = ?
-    ORDER BY COALESCE(bco.sort_order, 999999) ASC, bi.sort_order ASC
-  `).all(tripId) as BudgetItem[];
+  `;
+  const params: any[] = [tripId];
+
+  if (filters?.q) {
+    queryStr += ` AND (bi.name LIKE ? OR (bi.note IS NOT NULL AND bi.note LIKE ?))`;
+    params.push(`%${filters.q}%`, `%${filters.q}%`);
+  }
+
+  if (filters?.category) {
+    queryStr += ` AND bi.category = ?`;
+    params.push(filters.category);
+  }
+
+  const userFilter = filters?.user_id || filters?.persons;
+  if (userFilter) {
+    queryStr += ` AND EXISTS (
+      SELECT 1 FROM budget_item_members bim
+      WHERE bim.budget_item_id = bi.id AND bim.user_id = ?
+    )`;
+    params.push(Number(userFilter));
+  }
+
+  queryStr += ` ORDER BY COALESCE(bco.sort_order, 999999) ASC, bi.sort_order ASC`;
+
+  const items = db.prepare(queryStr).all(...params) as BudgetItem[];
 
   const itemIds = items.map(i => i.id);
   const membersByItem: Record<number, (BudgetItemMember & { avatar_url: string | null })[]> = {};
@@ -54,13 +80,16 @@ export function listBudgetItems(tripId: string | number) {
     }
   }
 
-  items.forEach(item => { item.members = membersByItem[item.id] || []; });
+  items.forEach(item => { 
+    item.members = membersByItem[item.id] || []; 
+    item.properties = item.properties ? (typeof item.properties === 'string' ? JSON.parse(item.properties) : item.properties) : undefined;
+  });
   return items;
 }
 
 export function createBudgetItem(
   tripId: string | number,
-  data: { category?: string; name: string; total_price?: number; persons?: number | null; days?: number | null; note?: string | null; expense_date?: string | null },
+  data: { category?: string; name: string; total_price?: number; currency?: string; original_amount?: number; exchange_rate?: number; persons?: number | null; days?: number | null; note?: string | null; expense_date?: string | null; properties?: Record<string, any> },
 ) {
   const maxOrder = db.prepare(
     'SELECT MAX(sort_order) as max FROM budget_items WHERE trip_id = ?'
@@ -78,21 +107,26 @@ export function createBudgetItem(
   }
 
   const result = db.prepare(
-    'INSERT INTO budget_items (trip_id, category, name, total_price, persons, days, note, sort_order, expense_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO budget_items (trip_id, category, name, total_price, currency, original_amount, exchange_rate, persons, days, note, sort_order, expense_date, properties) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   ).run(
     tripId,
     cat,
     data.name,
     data.total_price || 0,
+    data.currency || null,
+    data.original_amount !== undefined ? data.original_amount : null,
+    data.exchange_rate !== undefined ? data.exchange_rate : 1.0,
     data.persons != null ? data.persons : null,
     data.days !== undefined && data.days !== null ? data.days : null,
-    data.note || null,
+    data.note !== undefined && data.note !== null ? data.note : null,
     sortOrder,
     data.expense_date || null,
+    data.properties ? JSON.stringify(data.properties) : '{}'
   );
 
   const item = db.prepare('SELECT * FROM budget_items WHERE id = ?').get(result.lastInsertRowid) as BudgetItem & { members?: BudgetItemMember[] };
   item.members = [];
+  item.properties = item.properties ? (typeof item.properties === 'string' ? JSON.parse(item.properties) : item.properties) : undefined;
   return item;
 }
 
@@ -110,7 +144,7 @@ export function linkBudgetItemToReservation(
 export function updateBudgetItem(
   id: string | number,
   tripId: string | number,
-  data: { category?: string; name?: string; total_price?: number; persons?: number | null; days?: number | null; note?: string | null; sort_order?: number; expense_date?: string | null },
+  data: { category?: string; name?: string; total_price?: number; currency?: string; original_amount?: number; exchange_rate?: number; persons?: number | null; days?: number | null; note?: string | null; sort_order?: number; expense_date?: string | null; properties?: Record<string, any> },
 ) {
   const item = db.prepare('SELECT * FROM budget_items WHERE id = ? AND trip_id = ?').get(id, tripId);
   if (!item) return null;
@@ -120,21 +154,29 @@ export function updateBudgetItem(
       category = COALESCE(?, category),
       name = COALESCE(?, name),
       total_price = CASE WHEN ? IS NOT NULL THEN ? ELSE total_price END,
+      currency = CASE WHEN ? IS NOT NULL THEN ? ELSE currency END,
+      original_amount = CASE WHEN ? IS NOT NULL THEN ? ELSE original_amount END,
+      exchange_rate = CASE WHEN ? IS NOT NULL THEN ? ELSE exchange_rate END,
       persons = CASE WHEN ? IS NOT NULL THEN ? ELSE persons END,
       days = CASE WHEN ? THEN ? ELSE days END,
       note = CASE WHEN ? THEN ? ELSE note END,
       sort_order = CASE WHEN ? IS NOT NULL THEN ? ELSE sort_order END,
-      expense_date = CASE WHEN ? THEN ? ELSE expense_date END
+      expense_date = CASE WHEN ? THEN ? ELSE expense_date END,
+      properties = CASE WHEN ? THEN ? ELSE properties END
     WHERE id = ?
   `).run(
     data.category || null,
     data.name || null,
     data.total_price !== undefined ? 1 : null, data.total_price !== undefined ? data.total_price : 0,
+    data.currency !== undefined ? 1 : null, data.currency !== undefined ? data.currency : null,
+    data.original_amount !== undefined ? 1 : null, data.original_amount !== undefined ? data.original_amount : null,
+    data.exchange_rate !== undefined ? 1 : null, data.exchange_rate !== undefined ? data.exchange_rate : 1.0,
     data.persons !== undefined ? 1 : null, data.persons !== undefined ? data.persons : null,
     data.days !== undefined ? 1 : 0, data.days !== undefined ? data.days : null,
     data.note !== undefined ? 1 : 0, data.note !== undefined ? data.note : null,
     data.sort_order !== undefined ? 1 : null, data.sort_order !== undefined ? data.sort_order : 0,
     data.expense_date !== undefined ? 1 : 0, data.expense_date !== undefined ? (data.expense_date || null) : null,
+    data.properties !== undefined ? 1 : 0, data.properties !== undefined ? (data.properties ? JSON.stringify(data.properties) : '{}') : null,
     id,
   );
 
@@ -150,6 +192,7 @@ export function updateBudgetItem(
 
   const updated = db.prepare('SELECT * FROM budget_items WHERE id = ?').get(id) as BudgetItem & { members?: BudgetItemMember[] };
   updated.members = loadItemMembers(id);
+  updated.properties = updated.properties ? (typeof updated.properties === 'string' ? JSON.parse(updated.properties) : updated.properties) : undefined;
   return updated;
 }
 

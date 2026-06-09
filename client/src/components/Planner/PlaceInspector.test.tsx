@@ -86,7 +86,7 @@ beforeEach(() => {
 
   seedStore(useAuthStore, { user: buildUser(), isAuthenticated: true });
   seedStore(useTripStore, { trip: buildTrip({ id: 1 }) });
-  seedStore(useSettingsStore, { settings: { time_format: '24h', temperature_unit: 'celsius' } });
+  seedStore(useSettingsStore, { settings: { ...useSettingsStore.getState().settings, time_format: '24h', temperature_unit: 'celsius' } });
 
   vi.mocked(mapsApi.details).mockResolvedValue({ place: null });
 });
@@ -231,11 +231,11 @@ describe('PlaceInspector', () => {
     );
     const addBtn = screen.getByText('Add to Day').closest('button')!;
     await user.click(addBtn);
-    expect(onAssignToDay).toHaveBeenCalledWith(place.id);
+    expect(onAssignToDay).toHaveBeenCalledWith(place.id, 1);
   });
 
   it('FE-PLANNER-INSPECTOR-017: "Remove from day" button appears when place IS assigned to selectedDay', () => {
-    const assignmentInDay = [{ id: 99, place: { id: place.id }, day_id: 1, place_id: place.id, order_index: 0, notes: null }];
+    const assignmentInDay = [{ id: 99, place, day_id: 1, place_id: place.id, order_index: 0, notes: null }];
     render(
       <PlaceInspector
         {...defaultProps}
@@ -250,7 +250,7 @@ describe('PlaceInspector', () => {
   it('FE-PLANNER-INSPECTOR-018: clicking remove calls onRemoveAssignment with dayId and assignmentId', async () => {
     const user = userEvent.setup();
     const onRemoveAssignment = vi.fn();
-    const assignmentInDay = [{ id: 99, place: { id: place.id }, day_id: 1, place_id: place.id, order_index: 0, notes: null }];
+    const assignmentInDay = [{ id: 99, place, day_id: 1, place_id: place.id, order_index: 0, notes: null }];
     render(
       <PlaceInspector
         {...defaultProps}
@@ -262,8 +262,8 @@ describe('PlaceInspector', () => {
     // Find the remove button — it has "Remove" text (sm:hidden span)
     const removeBtn = screen.getByText('Remove').closest('button')!;
     await user.click(removeBtn);
-    // Component calls onRemoveAssignment(selectedDayId, assignmentInDay.id)
-    expect(onRemoveAssignment).toHaveBeenCalledWith(1, 99);
+    // Component calls onRemoveAssignment(assignmentInDay.id, selectedDayId)
+    expect(onRemoveAssignment).toHaveBeenCalledWith(99, 1);
   });
 
   // ── Inline name editing ────────────────────────────────────────────────────
@@ -406,7 +406,7 @@ describe('PlaceInspector', () => {
 
   it('FE-PLANNER-INSPECTOR-030: linked reservation shown when selectedAssignmentId has a reservation', () => {
     const reservation = buildReservation({ title: 'Museum Ticket', status: 'confirmed', assignment_id: 99 } as any);
-    const assignmentInDay = [{ id: 99, place: { id: place.id }, day_id: 1, place_id: place.id, order_index: 0, notes: null }];
+    const assignmentInDay = [{ id: 99, place, day_id: 1, place_id: place.id, order_index: 0, notes: null }];
     render(
       <PlaceInspector
         {...defaultProps}
@@ -423,7 +423,7 @@ describe('PlaceInspector', () => {
 
   it('FE-PLANNER-INSPECTOR-031: participants section shown when tripMembers > 1 and selectedAssignmentId is set', () => {
     const members = [buildUser({ id: 1 }), buildUser({ id: 2 })];
-    const assignmentInDay = [{ id: 99, place: { id: place.id }, day_id: 1, place_id: place.id, order_index: 0, notes: null }];
+    const assignmentInDay = [{ id: 99, place, day_id: 1, place_id: place.id, order_index: 0, notes: null }];
     render(
       <PlaceInspector
         {...defaultProps}
@@ -534,8 +534,8 @@ describe('PlaceInspector', () => {
     const member2 = buildUser({ id: 11, username: 'bob' });
     const members = [member1, member2];
     const assignmentInDay = [{
-      id: 99, place: { id: place.id }, day_id: 1, place_id: place.id, order_index: 0, notes: null,
-      participants: [{ user_id: 10 }],
+      id: 99, place, day_id: 1, place_id: place.id, order_index: 0, notes: null,
+      participants: [{ id: 10, username: 'alice' }],
     }];
     render(
       <PlaceInspector
@@ -582,7 +582,7 @@ describe('PlaceInspector', () => {
   // ── formatTime: 12h format ─────────────────────────────────────────────────
 
   it('FE-PLANNER-INSPECTOR-041: time shown in 12h format when setting is 12h', () => {
-    seedStore(useSettingsStore, { settings: { time_format: '12h' } });
+    seedStore(useSettingsStore, { settings: { ...useSettingsStore.getState().settings, time_format: '12h' } });
     const p = buildPlace({ id: 305, place_time: '14:30', end_time: null });
     render(<PlaceInspector {...defaultProps} place={p} />);
     // 14:30 in 12h = "2:30 PM"
@@ -592,7 +592,7 @@ describe('PlaceInspector', () => {
   // ── convertHoursLine: 24h→12h conversion ──────────────────────────────────
 
   it('FE-PLANNER-INSPECTOR-042: opening hours converted to 12h when setting is 12h', async () => {
-    seedStore(useSettingsStore, { settings: { time_format: '12h' } });
+    seedStore(useSettingsStore, { settings: { ...useSettingsStore.getState().settings, time_format: '12h' } });
     vi.mocked(mapsApi.details).mockResolvedValue({
       place: { opening_hours: ['Mon: 09:00 – 17:00'] },
     } as any);
@@ -637,7 +637,7 @@ describe('PlaceInspector', () => {
         tripMembers={[member]}
         selectedDayId={1}
         selectedAssignmentId={99}
-        assignments={{ '1': [{ id: 99, place: { id: place.id }, day_id: 1, place_id: place.id, order_index: 0, notes: null }] }}
+        assignments={{ '1': [{ id: 99, place, day_id: 1, place_id: place.id, order_index: 0, notes: null }] }}
       />
     );
     // "solo" username might be visible from other parts but participants box should not render

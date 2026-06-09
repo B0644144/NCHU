@@ -73,6 +73,7 @@ export interface Place {
   transport_mode?: string;
   created_at?: string;
   updated_at?: string;
+  properties?: any;
 }
 
 export interface Category {
@@ -114,6 +115,7 @@ export interface PackingItem {
   category?: string | null;
   sort_order: number;
   created_at?: string;
+  properties?: any;
 }
 
 export interface BudgetItem {
@@ -122,12 +124,17 @@ export interface BudgetItem {
   category: string;
   name: string;
   total_price: number;
+  currency?: string;
+  original_amount?: number | null;
+  exchange_rate?: number;
   persons?: number | null;
   days?: number | null;
   note?: string | null;
+  reservation_id?: number | null;
   sort_order: number;
   created_at?: string;
   members?: BudgetItemMember[];
+  properties?: any;
 }
 
 export interface BudgetItemMember {
@@ -175,6 +182,7 @@ export interface Reservation {
   created_at?: string;
   day_number?: number;
   place_name?: string;
+  properties?: any;
 }
 
 export interface TripFile {
@@ -213,6 +221,7 @@ export interface DayNote {
   time?: string | null;
   icon: string;
   sort_order: number;
+  category?: string | null;
   created_at?: string;
 }
 
@@ -230,6 +239,7 @@ export interface CollabNote {
   avatar?: string | null;
   created_at?: string;
   updated_at?: string;
+  properties?: any;
 }
 
 export interface CollabPoll {
